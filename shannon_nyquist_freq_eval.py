@@ -15,6 +15,7 @@ import numpy as np
 
 from scipy.constants import speed_of_light
 from scipy.fft import fft, fftfreq, fftshift
+from scipy import interpolate
 
 plt.rc('text', usetex=True)
 plt.rc('text.latex', preamble=r'\usepackage{amsmath} \usepackage{amsmath} \usepackage{amssymb}')
@@ -31,6 +32,7 @@ plt.rc('text.latex', preamble=r'\usepackage{amsmath} \usepackage{amsmath} \usepa
 #     r'',
 #     r''
 # ]
+
 
 def channel_model(bs_gain, bs_pos,
                   ue_gain, ue_pos,
@@ -101,7 +103,6 @@ def fourier_complex_coeff(ue_pos, ris_size_el, ris_num_els_hor, ris_configs, fou
         complex_coeffs_part2 = ((ii + enumeration_num_els_x) * np.exp(1j * 2 * np.pi * fundamental_freq * enumeration_num_els_x[None, :] * np.sin(ue_angles[:, None]))).sum(axis=-1)
         complex_coeffs_part3 = ((ii + enumeration_num_els_x)**2 * np.exp(1j * 2 * np.pi * fundamental_freq * enumeration_num_els_x[None, :] * np.sin(ue_angles[:, None]))).sum(axis=-1)
 
-
         complex_coeffs[:, idx] = complex_coeffs_part1 - 1j * np.pi * complex_coeffs_part2 / fundamental_freq - 2/3 * np.pi**2 * complex_coeffs_part3 / fundamental_freq
 
     return complex_coeffs
@@ -166,7 +167,7 @@ ue_pos *= minimum_distance
 fundamental_frequency = ris_size_el / wavelength
 
 # Number of configurations or samples
-ris_num_configs = 11
+ris_num_configs = 1001
 
 # Spatial duration of the signal
 spatial_duration = (np.pi/2 - 0)
@@ -174,7 +175,7 @@ spatial_duration = (np.pi/2 - 0)
 # Sampling period and frequency
 sampling_period = spatial_duration/ris_num_configs
 sampling_frequency = 1/sampling_period
-breakpoint()
+
 # Spatial step
 spatial_step = np.linspace(0, spatial_duration, ris_num_configs)
 
@@ -190,11 +191,37 @@ signal = term4[0, :, :].sum(axis=0)
 # Sampling signal
 ########################################
 
-# Plot signal
+# Number of configurations or samples
+num_samples = 21
+
+# Spatial duration of the signal
+spatial_duration = (np.pi/2 - 0)
+
+# Sampling period and frequency
+sampling_period = spatial_duration/num_samples
+sampling_frequency = 1/sampling_period
+
+# Spatial step
+spatial_step_sampled = np.linspace(0, spatial_duration, num_samples)
+
+# Generate signal
+term1, term2, term3, term4 = channel_model(
+    bs_gain, bs_pos,
+    ue_gain, ue_pos,
+    ris_size_el, ris_num_els_hor, ris_num_els_ver, spatial_step_sampled)
+
+signal_sampled = term4[0, :, :].sum(axis=0)
+
+########################################
+# PLot signal
+########################################
 fig, axes = plt.subplots(2, 1)
 
 axes[0].plot(np.rad2deg(spatial_step), signal.real, color='black')
 axes[1].plot(np.rad2deg(spatial_step), signal.imag, color='black')
+
+axes[0].stem(np.rad2deg(spatial_step_sampled), signal_sampled.real)
+axes[1].stem(np.rad2deg(spatial_step_sampled), signal_sampled.imag)
 
 axes[0].set_xlabel(r'config. angle $\theta_s$ in degrees')
 axes[1].set_xlabel(r'config. angle $\theta_s$ in degrees')
@@ -202,10 +229,10 @@ axes[1].set_xlabel(r'config. angle $\theta_s$ in degrees')
 axes[0].set_ylabel(r'$\mathfrak{Re}(a_k(\theta_s))$')
 axes[1].set_ylabel(r'$\mathfrak{Im}(a_k(\theta_s))$')
 
-axes[0].set_xticks(np.arange(0, 100, 10))
-axes[1].set_xticks(np.arange(0, 100, 10))
+axes[0].set_xticks(np.arange(0, 90, 10))
+axes[1].set_xticks(np.arange(0, 90, 10))
 
-axes[0].legend(fontsize='x-small', framealpha=0.5)
+# axes[0].legend(fontsize='x-small', framealpha=0.5)
 
 axes[0].grid(color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
 axes[1].grid(color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
@@ -217,10 +244,10 @@ plt.tight_layout()
 ########################################
 
 # Compute FFT
-signal_freq = fft(signal)
+signal_freq = fft(signal_sampled)
 
 # Compute frequency x-axis
-freq = fftfreq(ris_num_configs, d=sampling_period)
+freq = fftfreq(num_samples, d=sampling_period)
 
 # Prepare for plot
 freq_plot = fftshift(freq)
@@ -229,10 +256,39 @@ signal_freq_plot = fftshift(signal_freq)
 # Plot FFT
 fig, ax = plt.subplots()
 
-ax.plot(freq_plot, (1 / ris_num_configs) * np.abs(signal_freq_plot))
+ax.plot(freq_plot, (1 / num_samples) * np.abs(signal_freq_plot))
+
+########################################
+# Signal reconstruction
+########################################
+
+# Apply zero-order reconstruction
+zero_order_f_real = interpolate.interp1d(spatial_step_sampled, signal_sampled.real)
+zero_order_f_imag = interpolate.interp1d(spatial_step_sampled, signal_sampled.imag)
+
+fig, axes = plt.subplots(2, 1)
+
+axes[0].plot(np.rad2deg(spatial_step), signal.real, color='black')
+axes[1].plot(np.rad2deg(spatial_step), signal.imag, color='black')
+
+axes[0].plot(np.rad2deg(spatial_step_sampled), zero_order_f_real(spatial_step_sampled), linestyle=':')
+axes[1].plot(np.rad2deg(spatial_step_sampled), zero_order_f_imag(spatial_step_sampled), linestyle=':')
+
+axes[0].set_xlabel(r'config. angle $\theta_s$ in degrees')
+axes[1].set_xlabel(r'config. angle $\theta_s$ in degrees')
+
+axes[0].set_ylabel(r'$\mathfrak{Re}(a_k(\theta_s))$')
+axes[1].set_ylabel(r'$\mathfrak{Im}(a_k(\theta_s))$')
+
+axes[0].set_xticks(np.arange(0, 90, 10))
+axes[1].set_xticks(np.arange(0, 90, 10))
+
+# axes[0].legend(fontsize='x-small', framealpha=0.5)
+
+axes[0].grid(color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
+axes[1].grid(color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
 
 plt.show()
-
 #
 #
 # #-----
