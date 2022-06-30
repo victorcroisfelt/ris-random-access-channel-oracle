@@ -19,19 +19,11 @@ from scipy import interpolate
 
 plt.rc('text', usetex=True)
 plt.rc('text.latex', preamble=r'\usepackage{amsmath} \usepackage{amsmath} \usepackage{amssymb}')
+matplotlib.rc('font', **{'family': 'sans serif', 'serif': ['Computer Modern'], 'size': 8})
 
-# matplotlib.rc('font', **{'family': 'sans serif', 'serif': ['Computer Modern'], 'size': 12})
-#
-# matplotlib.rc('xtick', labelsize=8)
-# matplotlib.rc('ytick', labelsize=8)
-#
-# matplotlib.rc('text', usetex=True)
-#
-# matplotlib.rcParams['text.latex.preamble'] = [
-#     r'\usepackage{amsfonts}',
-#     r'',
-#     r''
-# ]
+########################################
+# Private functions
+########################################
 
 
 def channel_model(bs_gain, bs_pos,
@@ -84,6 +76,7 @@ def channel_model(bs_gain, bs_pos,
 ########################################
 # Parameters
 ########################################
+
 
 # Electromagnetics
 carrier_frequency = 3e9
@@ -381,39 +374,3 @@ ax.grid(color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
 plt.tight_layout()
 
 plt.show()
-
-
-# plt.show()
-#
-#
-# #-----
-# # BS
-# #-----
-#
-#
-#
-# #-----
-# # UE
-# #-----
-#
-#
-#
-#
-#
-# # Get constant term
-# constant = term1 * term2 * term3
-#
-#
-#
-#
-# # Define Fourier terms
-# fourier_terms = np.array([-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5])
-#
-# complex_coeffs = fourier_complex_coeff(ue_pos, ris_size_el, ris_num_els_hor, ris_configs, fourier_terms)
-#
-# fig, ax = plt.subplots()
-#
-# ax.stem(fourier_terms, np.abs(np.squeeze(complex_coeffs))**2)
-#
-# plt.show()
-
