@@ -17,17 +17,6 @@ plt.rc('text', usetex=True)
 plt.rc('text.latex', preamble=r'\usepackage{amsmath} \usepackage{amsmath} \usepackage{amssymb}')
 matplotlib.rc('font', **{'family': 'sans serif', 'serif': ['Computer Modern'], 'size': 8})
 
-# matplotlib.rc('xtick', labelsize=8)
-# matplotlib.rc('ytick', labelsize=8)
-#
-# matplotlib.rc('text', usetex=True)
-#
-matplotlib.rcParams['text.latex.preamble'] = [
-    r'\usepackage{amsfonts}',
-    r'\usepackage{amsmath}',
-    r'\usepackage{amssymb}'
-]
-
 ########################################
 # Parameters
 ########################################
@@ -53,7 +42,7 @@ for ii, tolerance in enumerate(tolerance_range):
 ########################################
 # PLot signal
 ########################################
-fig, ax = plt.subplots(figsize=(3.15, 3))
+fig, ax = plt.subplots(figsize=(3.15, 3/2))
 
 styles = ['-', '--', ':']
 labels = ['10^{-1}', '10^{-2}', '10^{-3}']

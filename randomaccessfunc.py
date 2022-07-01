@@ -3,6 +3,7 @@ import numpy as np
 import networkx as nx
 from networkx.algorithms import bipartite
 
+
 def collision_resolution(ue_choices, buffered_access_attempts, gamma_th):
     """Evaluates the number of successful access attempts of the random access method given the choices made by the UEs
     and the power received by the BS.
@@ -146,6 +147,7 @@ def collision_resolution(ue_choices, buffered_access_attempts, gamma_th):
         B.remove_nodes_from(list(nx.isolates(B)))
 
     return num_successful_attempts
+
 
 def collision_resolution_slotted(ue_access, buffered_access_attempts, gamma_th):
     """Evaluates the number of successful access attempts of the random access method given the choices made by the UEs

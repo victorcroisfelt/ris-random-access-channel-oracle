@@ -19,19 +19,12 @@ from scipy import interpolate
 
 plt.rc('text', usetex=True)
 plt.rc('text.latex', preamble=r'\usepackage{amsmath} \usepackage{amsmath} \usepackage{amssymb}')
+matplotlib.rc('font', **{'family': 'sans serif', 'serif': ['Computer Modern'], 'size': 8})
 
-# matplotlib.rc('font', **{'family': 'sans serif', 'serif': ['Computer Modern'], 'size': 12})
-#
-# matplotlib.rc('xtick', labelsize=8)
-# matplotlib.rc('ytick', labelsize=8)
-#
-# matplotlib.rc('text', usetex=True)
-#
-# matplotlib.rcParams['text.latex.preamble'] = [
-#     r'\usepackage{amsfonts}',
-#     r'',
-#     r''
-# ]
+
+########################################
+# Private functions
+########################################
 
 
 def channel_model(bs_gain, bs_pos,
@@ -53,15 +46,15 @@ def channel_model(bs_gain, bs_pos,
     ue_distances = np.linalg.norm(ue_pos, axis=0)
     ue_angles = np.arctan2(ue_pos[0, :], ue_pos[1, :])
 
-    # Compute DL pahloss of shape (num_ues, )
-    num = bs_gain * ue_gain * (ris_size_el * ris_size_el)**2
-    den = (4 * np.pi * bs_distance * ue_distances)**2
+    # Compute DL pathloss of shape (num_ues, )
+    num = bs_gain * ue_gain * (ris_size_el * ris_size_el) ** 2
+    den = (4 * np.pi * bs_distance * ue_distances) ** 2
 
-    const = num/den
-    
-    pathloss_dl = const * np.cos(bs_angle)**2
+    const = num / den
 
-    # Compute fundamental frequency 
+    pathloss_dl = const * np.cos(bs_angle) ** 2
+
+    # Compute fundamental frequency
     fundamental_freq = ris_size_el / wavelength
 
     # Compute term 1
@@ -71,15 +64,22 @@ def channel_model(bs_gain, bs_pos,
     term2 = np.exp(1j * 2 * np.pi * fundamental_freq * ((bs_distance + ue_distances) / ris_size_el))
 
     # Compute term 3
-    term3 = np.exp(-1j  * 2 * np.pi * fundamental_freq * (ris_num_els_hor + 1) / 2 * (np.sin(bs_angle) - np.sin(ue_angles)))
+    term3 = np.exp(
+        -1j * 2 * np.pi * fundamental_freq * (ris_num_els_hor + 1) / 2 * (np.sin(bs_angle) - np.sin(ue_angles)))
 
     # Compute term 4
     enumeration_num_els_x = np.arange(1, ris_num_els_hor + 1)
 
-    term4 = np.exp(1j * 2 * np.pi * fundamental_freq * enumeration_num_els_x[:, None, None] * (np.sin(ue_angles)[:, None] - np.sin(ris_configs)[None, :]))
+    term4 = np.exp(1j * 2 * np.pi * fundamental_freq * enumeration_num_els_x[:, None, None] * (
+                np.sin(ue_angles)[:, None] - np.sin(ris_configs)[None, :]))
     term4 = term4.transpose(1, 0, 2)
 
-    return term1, term2, term3, term4
+    term4 = term4[:, :, :].sum(axis=1)
+
+    # Compute channel gains
+    channel_gains = term1[:, None] * term2[:, None] * term3[:, None] * term4
+
+    return channel_gains
 
 ########################################
 # Parameters
@@ -154,12 +154,12 @@ sampling_frequency = 1/sampling_period
 spatial_step = np.linspace(0, spatial_duration, ris_num_configs)
 
 # Generate signal
-term1, term2, term3, term4 = channel_model(
+signal = channel_model(
     bs_gain, bs_pos,
     ue_gain, ue_pos,
     ris_size_el, ris_num_els_hor, ris_num_els_ver, spatial_step)
 
-signal = term4[0, :, :].sum(axis=0)
+signal = np.squeeze(signal)
 
 ########################################
 # Sampling signal
@@ -179,12 +179,12 @@ sampling_frequency = 1/sampling_period
 spatial_step_sampled = np.linspace(0, spatial_duration, num_samples)
 
 # Generate signal
-term1, term2, term3, term4 = channel_model(
+signal_sampled = channel_model(
     bs_gain, bs_pos,
     ue_gain, ue_pos,
     ris_size_el, ris_num_els_hor, ris_num_els_ver, spatial_step_sampled)
 
-signal_sampled = term4[0, :, :].sum(axis=0)
+signal_sampled = np.squeeze(signal_sampled)
 
 ########################################
 # PLot signal

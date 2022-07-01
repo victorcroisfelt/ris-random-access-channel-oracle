@@ -52,10 +52,10 @@ def channel_model(bs_gain, bs_pos,
     den = (4 * np.pi * bs_distance * ue_distances)**2
 
     const = num/den
-    
+
     pathloss_dl = const * np.cos(bs_angle)**2
 
-    # Compute fundamental frequency 
+    # Compute fundamental frequency
     fundamental_freq = ris_size_el / wavelength
 
     # Compute term 1
@@ -65,7 +65,7 @@ def channel_model(bs_gain, bs_pos,
     term2 = np.exp(1j * 2 * np.pi * fundamental_freq * ((bs_distance + ue_distances) / ris_size_el))
 
     # Compute term 3
-    term3 = np.exp(-1j  * 2 * np.pi * fundamental_freq * (ris_num_els_hor + 1) / 2 * (np.sin(bs_angle) - np.sin(ue_angles)))
+    term3 = np.exp(-1j * 2 * np.pi * fundamental_freq * (ris_num_els_hor + 1) / 2 * (np.sin(bs_angle) - np.sin(ue_angles)))
 
     # Compute term 4
     enumeration_num_els_x = np.arange(1, ris_num_els_hor + 1)
@@ -142,37 +142,11 @@ ue_pos[1, :] = np.cos(ue_angles)
 ue_pos *= ue_distances
 
 ########################################
-# Generating true channel gains
-########################################
-
-# Number of configurations or samples
-ris_num_configs_true = 1001
-
-# Signal range
-signal_range = (np.pi/2 - 0)
-
-# Sampling period and frequency
-sampling_period = signal_range/ris_num_configs_true
-sampling_frequency = 1/sampling_period
-
-# Spatial step
-ris_configs_true = np.linspace(0, signal_range, ris_num_configs_true)
-
-# Generate signal
-channel_gains_true = channel_model(
-    bs_gain, bs_pos,
-    ue_gain, ue_pos,
-    ris_size_el, ris_num_els_hor, ris_num_els_ver, ris_configs_true)
-
-########################################
 # Generating channel gains
 ########################################
 
-# Compute fundamental frequency
-fundamental_frequency = ris_size_el / wavelength
-
 # Number of configurations or samples
-ris_num_configs = 26
+ris_num_configs = 100
 
 # Signal range
 signal_range = (np.pi/2 - 0)
@@ -194,11 +168,11 @@ channel_gains = channel_model(
 # Simulation parameters
 ########################################
 
-# Define MVU error tolerance
-tolerance = 0.01
+# Define range of MVU error tolerance
+tolerances = np.array([0.1, 0.01, 0.001])
 
 # Define SNR range
-snr_db_range = np.linspace(-10, 10, 101)
+snr_db_range = np.linspace(-10, 10, 11)
 
 # Transform SNR linear
 snr_range = 10**(snr_db_range/10)
@@ -206,8 +180,8 @@ snr_range = 10**(snr_db_range/10)
 # Number of noise realizations
 num_noise_realizations = 100
 
-# Prepare to save reconstruction MSEs
-mse_recon = np.zeros((snr_range.size, num_ues, num_noise_realizations))
+# Prepare to save MVU MSEs
+mse_mvu = np.zeros((tolerances.size, snr_range.size, num_ues))
 
 # Go through all SNR values
 for ss in trange(snr_range.size, desc='simulating', unit="snr points"):
@@ -215,60 +189,54 @@ for ss in trange(snr_range.size, desc='simulating', unit="snr points"):
     # Extract current SNR
     snr = snr_range[ss]
 
-    # Compute the number of channel uses
-    num_channel_uses_ce = int(np.ceil(1 / (snr * tolerance)))
+    # Go through all tolerances
+    for tt, tolerance in enumerate(tolerances):
 
-    # Define reference signal
-    reference_signal = 1 / np.sqrt(2) * (np.ones((num_noise_realizations, num_channel_uses_ce)) + 1j * np.ones((num_noise_realizations, num_channel_uses_ce)))
+        # Compute the number of channel uses
+        num_channel_uses_ce = int(np.ceil(1 / (snr * tolerance)))
 
-    # Go through each UE
-    for ue in range(num_ues):
+        # Define reference signal
+        reference_signal = (1 / np.sqrt(2)) * (np.ones((num_noise_realizations, num_channel_uses_ce)) + 1j * np.ones((num_noise_realizations, num_channel_uses_ce)))
 
-        # Prepare to save estimated channel gains
-        estimated_channel_gains = np.zeros((ris_num_configs, num_noise_realizations), dtype=np.complex_)
+        # Go through all UEs
+        for ue in range(num_ues):
 
-        # Go through configurations
-        for ce in range(ris_num_configs):
+            # Prepare to save estimated channel gains
+            estimated_channel_gains = np.zeros((ris_num_configs, num_noise_realizations), dtype=np.complex_)
 
-            # Generate noise
-            noise = (1 / np.sqrt(2)) * (np.random.randn(num_noise_realizations, num_channel_uses_ce) + 1j * np.random.randn(num_noise_realizations, num_channel_uses_ce))
+            # Go through configurations
+            for ce in range(ris_num_configs):
 
-            # Generate received signals
-            received_signals = np.sqrt(snr) * channel_gains[ue, ce, None, None] * reference_signal[:, :] + noise[:, :]
+                # Generate noise
+                noise = (1 / np.sqrt(2)) * (np.random.randn(num_noise_realizations, num_channel_uses_ce) + 1j * np.random.randn(num_noise_realizations, num_channel_uses_ce))
 
-            # Prepare to save MVU estimates
-            estimated_channel_gains[ce, :] = (1 / (num_channel_uses_ce * np.sqrt(snr))) * (reference_signal.conj() * received_signals).sum(axis=-1)
+                # Generate received signals
+                received_signals = np.sqrt(snr) * channel_gains[ue, ce, None, None] * reference_signal[:, :] + noise[:, :]
 
-        # Go through each noise realization
-        for rr in range(num_noise_realizations):
+                # Prepare to save MVU estimates
+                estimated_channel_gains[ce, :] = (1/(num_channel_uses_ce * np.sqrt(snr))) * (reference_signal.conj() * received_signals).sum(axis=-1)
 
-            # Apply zero-order reconstruction
-            zero_order_f_real = interpolate.interp1d(ris_configs, estimated_channel_gains[:, rr].real)
-            zero_order_f_imag = interpolate.interp1d(ris_configs, estimated_channel_gains[:, rr].imag)
-
-            # Get values
-            zero_order_real = zero_order_f_real(ris_configs_true)
-            zero_order_imag = zero_order_f_imag(ris_configs_true)
-
-            # Reconstructed signal
-            channel_gains_recon = zero_order_real + 1j * zero_order_imag
-
-            # Evaluate MSE
-            mse_recon[ss, ue, rr] = (np.abs(channel_gains_true[ue, :] - channel_gains_recon)**2).mean()
-
-# Take the average in terms of noise realizations
-avg_mse_recon = mse_recon.mean(axis=-1)
+            # Compute MSE
+            mse_mvu[tt, ss, ue] = np.mean((np.abs(estimated_channel_gains - channel_gains[ue, :, None])**2))
 
 ########################################
 # Plot reconstruction MSE
 ########################################
 fig, ax = plt.subplots(figsize=(3.15, 3))
 
-ax.plot(snr_db_range, np.mean(avg_mse_recon, axis=-1), color='black', linewidth=1.5, linestyle='-')
-ax.fill_between(snr_db_range, np.percentile(avg_mse_recon, 25, axis=-1), np.percentile(avg_mse_recon, 75, axis=-1), color='black')
+styles = ['--', '-.', ':']
+labels = ['10^{-1}', '10^{-2}', '10^{-3}']
+
+# Go through all tolerances
+for tt, tolerance in enumerate(tolerances):
+    ax.plot(snr_db_range, np.mean(mse_mvu[tt, :], axis=-1), linestyle=styles[tt], color='black',  label=r'$\mathrm{tol}=' + str(labels[tt]) + '$')
+
+    ax.fill_between(snr_db_range, np.percentile(mse_mvu[tt, :], 25, axis=-1), np.percentile(mse_mvu[tt, :], 75, axis=-1))
 
 ax.set_xlabel(r'$\mathrm{SNR}^{\rm DL}$ [dB]')
-ax.set_ylabel(r'reconstruction MSE')
+ax.set_ylabel(r'MSE MVU')
+
+ax.legend(fontsize='x-small', loc='best')
 
 ax.set_yscale('log')
 
@@ -277,5 +245,3 @@ ax.grid(color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
 plt.tight_layout()
 
 plt.show()
-
-#ax.legend(fontsize='x-small', loc='best')
