@@ -118,10 +118,12 @@ class Box:
             raise ValueError('n must be int >= 0.')
 
         # Compute distances
-        distances = np.sqrt(self.rng.rand(n) * (self.maximum_distance**2 - self.minimum_distance**2) + self.minimum_distance**2)
+        distances = np.sqrt(self.rng.rand(n, 1) * (self.maximum_distance**2 - self.minimum_distance**2) + self.minimum_distance**2)
+        distances = np.squeeze(distances)
 
         # Compute angles
-        angles = np.pi/2 * self.rng.rand(n)
+        angles = np.pi/2 * self.rng.rand(n, 1)
+        angles = np.squeeze(angles)
 
         # Compute pos
         pos = np.zeros((n, 3))
@@ -133,10 +135,11 @@ class Box:
 
     def place_ris(self,
                   pos: np.ndarray = None,
-                  num_els_z: int = None,
-                  num_els_x: int = None,
+                  num_els_ver: int = None,
+                  num_els_hor: int = None,
                   size_el: float = None,
-                  num_configs: int = None
+                  num_ce_configs: int = None,
+                  num_access_configs: int = None
                   ):
         """Place a single RIS in the environment. If a new RIS is set the old one is canceled.
 
@@ -146,10 +149,10 @@ class Box:
         pos : ndarray of shape (3,)
             Position of the RIS in rectangular coordinates.
 
-        num_els_z : int
+        num_els_ver : int
             Number of elements along z-axis.
 
-        num_els_x : int
+        num_els_hor : int
             Number of elements along x-axis.
 
         size_el : float
@@ -162,24 +165,66 @@ class Box:
         # Append RIS
         self.ris = RIS(
             pos=pos,
-            num_els_z=num_els_z,
-            num_els_x=num_els_x,
+            num_els_ver=num_els_ver,
+            num_els_hor=num_els_hor,
             wavelength=self.wavelength,
             size_el=size_el,
-            num_configs=num_configs
+            num_ce_configs=num_ce_configs,
+            num_access_configs=num_access_configs
         )
 
-    def get_channel_model(self):
-        """Get Downlink (DL) and Uplink (UL) channel gain.
+    def get_ce_channel_gains(self):
+        """Calculate channel gains for the configuration estimation phase.
 
         Returns
         -------
-        channel_gains_dl : ndarray of shape (num_configs, num_ues)
-            Downlink channel gain between the BS and each UE for each RIS configuration.
+        channel_gains_ce: ndarray of shape (num_ce_configs, num_ues)
+            Downlink channel gains between the BS and UEs given each RIS configuration.
+        """
+        # Compute constant term
+        num = self.bs.gain * self.ue.gain * (self.ris.size_el * self.ris.size_el)**2
+        den = (4 * np.pi * self.bs.distance * self.ue.distances)**2
 
-        channel_gains_ul : ndarray of shape (num_configs, num_ues)
-            Uplink channel gain between the BS and each UE for each RIS configuration.
+        const = num/den
 
+        # Compute DL pathloss component of shape (num_ues, )
+        pathloss = const * np.cos(self.bs.angle)**2
+
+        # Compute fundamental frequency
+        fundamental_freq = self.ris.size_el / self.wavelength
+
+        # Compute term 1
+        term1 = np.sqrt(pathloss) * self.ris.num_els_ver
+
+        # Compute term 2
+        term2 = np.exp(1j * 2 * np.pi * fundamental_freq * ((self.bs.distance + self.ue.distances) / self.ris.size_el))
+
+        # Compute term 3
+        term3 = np.exp(
+            -1j * 2 * np.pi * fundamental_freq * (self.ris.num_els_hor + 1) / 2 * (np.sin(self.bs.angle) - np.sin(self.ue.angles))
+        )
+
+        # Compute term 4
+        enumeration_num_els_hor = np.arange(1, self.ris.num_els_hor + 1)
+
+        term4 = np.exp(1j * 2 * np.pi * fundamental_freq * enumeration_num_els_hor[:, None, None] * (
+                    np.sin(self.ue.angles)[:, None] - np.sin(self.ris.get_ce_codebook())[None, :]))
+        term4 = term4.transpose(1, 0, 2)
+
+        term4 = term4[:, :, :].sum(axis=1)
+
+        # Compute channel gains
+        channel_gains_ce = term1[:, None] * term2[:, None] * term3[:, None] * term4
+
+        return channel_gains_ce
+
+    def get_ul_channel_gains(self):
+        """Calculate uplink channel gains.
+
+        Returns
+        -------
+        channel_gains_ul : ndarray of shape (num_access_configs, num_ues)
+            Uplink channel gains between the BS and UEs given each RIS configuration.
         """
         # Compute constant term
         num = self.bs.gain * self.ue.gain * (self.ris.size_el * self.ris.size_el)**2
@@ -195,17 +240,17 @@ class Box:
 
         # Compute constant phase component of shape (num_ues, )
         distances_sum = (self.bs.distance + self.ue.distances)
-        disagreement = (np.sin(self.bs.angle) - np.sin(self.ue.angles)) * ((self.ris.num_els_x + 1) / 2) * self.ris.size_el
+        disagreement = (np.sin(self.bs.angle) - np.sin(self.ue.angles)) * ((self.ris.num_els_hor + 1) / 2) * self.ris.size_el
 
         phi = - self.wavenumber * (distances_sum - disagreement)
 
         # Compute array factor of shape (num_configs, num_ues)
-        enumeration_num_els_x = np.arange(1, self.ris.num_els_x + 1)
+        enumeration_num_els_hor = np.arange(1, self.ris.num_els_hor + 1)
         sine_differences = (np.sin(self.ue.angles[np.newaxis, :, np.newaxis]) - np.sin(self.ris.configs[:, np.newaxis, np.newaxis]))
 
-        argument = self.wavenumber * sine_differences * enumeration_num_els_x[np.newaxis, np.newaxis, :] * self.ris.size_el
+        argument = self.wavenumber * sine_differences * enumeration_num_els_hor[np.newaxis, np.newaxis, :] * self.ris.size_el
 
-        array_factor_dl = self.ris.num_els_z * np.sum(np.exp(+1j * argument), axis=-1)
+        array_factor_dl = self.ris.num_els_ver * np.sum(np.exp(+1j * argument), axis=-1)
         array_factor_ul = array_factor_dl.conj()
 
         # Compute channel gains of shape (num_configs, num_ues)
@@ -214,75 +259,78 @@ class Box:
 
         return channel_gains_dl, channel_gains_ul
 
-    def get_channel_model_slotted_aloha(self):
-        """Get Downlink (DL) and Uplink (UL) channel gain.
 
-        Returns
-        -------
-        channel_gains_dl : ndarray of shape (1, num_ues)
-            Downlink channel gain between the BS and each UE.
 
-        channel_gains_ul : ndarray of shape (1, num_ues)
-            Uplink channel gain between the BS and each UE.
 
-        """
-        # Compute DL pathloss component of shape (num_ues, )
-        distance_bs_ue = np.linalg.norm(self.ue.pos - self.bs.pos, axis=-1)
-
-        num = self.bs.gain * self.ue.gain
-        den = (4 * np.pi * distance_bs_ue)**2
-
-        pathloss_dl = num / den
-
-        # Compute UL pathloss component of shape (num_ues, )
-        pathloss_ul = pathloss_dl
-
-        # Compute constant phase component of shape (num_ues, )
-        phi = - self.wavenumber * distance_bs_ue
-
-        # Compute channel gains of shape (num_configs, num_ues)
-        channel_gains_dl = np.sqrt(pathloss_dl[np.newaxis, :]) * np.exp(+1j * phi[np.newaxis, :])
-        channel_gains_ul = np.sqrt(pathloss_ul[np.newaxis, :]) * np.exp(-1j * phi[np.newaxis, :])
-
-        return channel_gains_dl, channel_gains_ul
-
-    def plot_scenario(self):
-        """This method will plot the scenario of communication
-        """
-        # LaTeX type definitions
-        rc('font', **{'family': 'sans serif', 'serif': ['Computer Modern']})
-        rc('text', usetex=True)
-        # Open axes
-        fig, ax = plt.subplots()
-
-        # Box positioning
-        box = plt.Rectangle((self.min_square_length, self.min_square_length), self.square_length, self.square_length, ec="black", ls="--", lw=1, fc='#45EF0605')
-        ax.add_patch(box)
-        # User positioning
-        delta = self.min_square_length / 100
-        # BS
-        plt.scatter(self.bs.pos[0], self.bs.pos[1], c=common.node_color['BS'], marker=common.node_mark['BS'],
-                    label='BS')
-        # plt.text(self.bs.pos[:, 0], self.bs.pos[:, 1] + delta, s='BS', fontsize=10)
-        # UE
-        plt.scatter(self.ue.pos[:, 0], self.ue.pos[:, 1], c=common.node_color['UE'], marker=common.node_mark['UE'],
-                    label='UE')
-        for k in np.arange(self.ue.n):
-            plt.text(self.ue.pos[k, 0], self.ue.pos[k, 1] + delta, s=f'{k}', fontsize=10)
-        # RIS
-        plt.scatter(self.ris.pos[0], self.ris.pos[1], c=common.node_color['RIS'], marker=common.node_mark['RIS'],
-                    label='RIS')
-        # plt.text(self.ris.pos[:, 0], self.ris.pos[:, 1] + delta, s='RIS', fontsize=10)
-        # Set axis
-        # ax.axis('equal')
-        ax.set_xlabel('$x$ [m]')
-        ax.set_ylabel('$y$ [m]')
-        # limits
-        ax.set_ylim(ymin=-self.min_square_length / 2)
-        # Legend
-        handles, labels = plt.gca().get_legend_handles_labels()
-        by_label = OrderedDict(zip(labels, handles))
-        ax.legend(by_label.values(), by_label.keys())
-        # Finally
-        plt.grid(color='#E9E9E9', linestyle='--', linewidth=0.5)
-        plt.show(block=False)
+    # def get_channel_model_slotted_aloha(self):
+    #     """Get Downlink (DL) and Uplink (UL) channel gain.
+    #
+    #     Returns
+    #     -------
+    #     channel_gains_dl : ndarray of shape (1, num_ues)
+    #         Downlink channel gain between the BS and each UE.
+    #
+    #     channel_gains_ul : ndarray of shape (1, num_ues)
+    #         Uplink channel gain between the BS and each UE.
+    #
+    #     """
+    #     # Compute DL pathloss component of shape (num_ues, )
+    #     distance_bs_ue = np.linalg.norm(self.ue.pos - self.bs.pos, axis=-1)
+    #
+    #     num = self.bs.gain * self.ue.gain
+    #     den = (4 * np.pi * distance_bs_ue)**2
+    #
+    #     pathloss_dl = num / den
+    #
+    #     # Compute UL pathloss component of shape (num_ues, )
+    #     pathloss_ul = pathloss_dl
+    #
+    #     # Compute constant phase component of shape (num_ues, )
+    #     phi = - self.wavenumber * distance_bs_ue
+    #
+    #     # Compute channel gains of shape (num_configs, num_ues)
+    #     channel_gains_dl = np.sqrt(pathloss_dl[np.newaxis, :]) * np.exp(+1j * phi[np.newaxis, :])
+    #     channel_gains_ul = np.sqrt(pathloss_ul[np.newaxis, :]) * np.exp(-1j * phi[np.newaxis, :])
+    #
+    #     return channel_gains_dl, channel_gains_ul
+    #
+    # def plot_scenario(self):
+    #     """This method will plot the scenario of communication
+    #     """
+    #     # LaTeX type definitions
+    #     rc('font', **{'family': 'sans serif', 'serif': ['Computer Modern']})
+    #     rc('text', usetex=True)
+    #     # Open axes
+    #     fig, ax = plt.subplots()
+    #
+    #     # Box positioning
+    #     box = plt.Rectangle((self.min_square_length, self.min_square_length), self.square_length, self.square_length, ec="black", ls="--", lw=1, fc='#45EF0605')
+    #     ax.add_patch(box)
+    #     # User positioning
+    #     delta = self.min_square_length / 100
+    #     # BS
+    #     plt.scatter(self.bs.pos[0], self.bs.pos[1], c=common.node_color['BS'], marker=common.node_mark['BS'],
+    #                 label='BS')
+    #     # plt.text(self.bs.pos[:, 0], self.bs.pos[:, 1] + delta, s='BS', fontsize=10)
+    #     # UE
+    #     plt.scatter(self.ue.pos[:, 0], self.ue.pos[:, 1], c=common.node_color['UE'], marker=common.node_mark['UE'],
+    #                 label='UE')
+    #     for k in np.arange(self.ue.n):
+    #         plt.text(self.ue.pos[k, 0], self.ue.pos[k, 1] + delta, s=f'{k}', fontsize=10)
+    #     # RIS
+    #     plt.scatter(self.ris.pos[0], self.ris.pos[1], c=common.node_color['RIS'], marker=common.node_mark['RIS'],
+    #                 label='RIS')
+    #     # plt.text(self.ris.pos[:, 0], self.ris.pos[:, 1] + delta, s='RIS', fontsize=10)
+    #     # Set axis
+    #     # ax.axis('equal')
+    #     ax.set_xlabel('$x$ [m]')
+    #     ax.set_ylabel('$y$ [m]')
+    #     # limits
+    #     ax.set_ylim(ymin=-self.min_square_length / 2)
+    #     # Legend
+    #     handles, labels = plt.gca().get_legend_handles_labels()
+    #     by_label = OrderedDict(zip(labels, handles))
+    #     ax.legend(by_label.values(), by_label.keys())
+    #     # Finally
+    #     plt.grid(color='#E9E9E9', linestyle='--', linewidth=0.5)
+    #     plt.show(block=False)

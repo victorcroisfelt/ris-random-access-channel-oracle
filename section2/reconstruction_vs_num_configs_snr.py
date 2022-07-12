@@ -27,7 +27,6 @@ matplotlib.rc('font', **{'family': 'sans serif', 'serif': ['Computer Modern'], '
 # System Parameters
 ########################################
 
-
 # Electromagnetic
 carrier_frequency = 3e9
 wavelength = speed_of_light / carrier_frequency
@@ -113,36 +112,35 @@ channel_gains_true = dl_channel_gains(
 ########################################
 
 # Define MVU error tolerance
-tolerance = 10e-12
+tolerance = 0.01
 
-# Define SNR
-snr_db = 0
+# Define SNR range
+snr_db_range = np.linspace(-10, 10, 101)
 
 # Transform SNR linear
-snr = 10**(snr_db/10)
-
-# Compute fundamental frequency
-fundamental_frequency = ris_size_el / wavelength
-
-# Signal range
-signal_range = (np.pi/2 - 0)
+snr_range = 10**(snr_db_range/10)
 
 # Number of noise realizations
 num_noise_realizations = 100
 
+# Compute fundamental frequency
+fundamental_frequency = ris_size_el / wavelength
+
 # Range of the number of configurations or samples
-ris_num_configs_range = np.arange(10, 150, 10)
+ris_num_configs_range = np.array([26, 142, 16])
+
+# Signal range
+signal_range = (np.pi/2 - 0)
 
 # Range number of configurations range
 num_range = ris_num_configs_range.size
 
 # Prepare to save reconstruction MSEs
-mse_recon_true = np.zeros((num_range, num_ues))
-#mse_recon = np.zeros((num_range, num_ues, num_noise_realizations))
-mse_recon = np.zeros((num_range, num_ues))
+mse_recon_true = np.zeros((num_range, snr_range.size, num_ues))
+mse_recon = np.zeros((num_range, snr_range.size, num_ues))
 
 # Go through all number of configurations
-for cc in trange(num_range, desc='simulating', unit="configs"):
+for cc in trange(num_range, desc='outer loop', unit="configs"):
 
     # Get the current number of configurations
     ris_num_configs = ris_num_configs_range[cc]
@@ -180,38 +178,43 @@ for cc in trange(num_range, desc='simulating', unit="configs"):
         channel_gains_recon_true = zero_order_real + 1j * zero_order_imag
 
         # Evaluate true reconstruction MSE
-        mse_recon_true[cc, ue] = (np.abs(channel_gains_true[ue, :] - channel_gains_recon_true)**2).mean()
-
-        ####################
-        # Estimated reconstruction
-        ####################
-
-        # Compute the number of channel uses
-        num_channel_uses_ce = int(np.ceil(1 / (snr * tolerance)))
+        mse_recon_true[cc, :, ue] = (np.abs(channel_gains_true[ue, :] - channel_gains_recon_true)**2).mean()
 
         # Generate equivalent noise
         noise = (np.random.randn(ris_num_configs) + 1j * np.random.randn(ris_num_configs))
-        noise *= np.sqrt(1 / (2 * num_channel_uses_ce * snr))
 
-        # Get estimated channel gains
-        estimated_channel_gains = channel_gains[ue, :] + noise
+        # Go through all SNR values
+        for ss in range(snr_range.size):
 
-        # # Go through each noise realization
-        # for rr in range(num_noise_realizations):
+            # Extract current SNR
+            snr = snr_range[ss]
 
-        # Apply zero-order reconstruction
-        zero_order_f_real = interpolate.interp1d(ris_configs, estimated_channel_gains.real)
-        zero_order_f_imag = interpolate.interp1d(ris_configs, estimated_channel_gains.imag)
+            ####################
+            # Estimated reconstruction
+            ####################
 
-        # Get values
-        zero_order_real = zero_order_f_real(ris_configs_true)
-        zero_order_imag = zero_order_f_imag(ris_configs_true)
+            # Compute the number of channel uses
+            num_channel_uses_ce = int(np.ceil(1 / (snr * tolerance)))
 
-        # Reconstructed signal
-        channel_gains_recon = zero_order_real + 1j * zero_order_imag
+            # Normalize noise
+            noise *= np.sqrt(1 / (2 * num_channel_uses_ce * snr))
 
-        # Evaluate MSE
-        mse_recon[cc, ue] = (np.abs(channel_gains_true[ue, :] - channel_gains_recon)**2).mean()
+            # Get estimated channel gains
+            estimated_channel_gains = channel_gains[ue, :, None] + noise
+
+            # Apply zero-order reconstruction
+            zero_order_f_real = interpolate.interp1d(ris_configs, estimated_channel_gains.real)
+            zero_order_f_imag = interpolate.interp1d(ris_configs, estimated_channel_gains.imag)
+
+            # Get values
+            zero_order_real = zero_order_f_real(ris_configs_true)
+            zero_order_imag = zero_order_f_imag(ris_configs_true)
+
+            # Reconstructed signal
+            channel_gains_recon = zero_order_real + 1j * zero_order_imag
+
+            # Evaluate MSE
+            mse_recon[cc, ss, ue] = (np.abs(channel_gains_true[ue, :] - channel_gains_recon)**2).mean()
 
 # Take the average in terms of noise realizations
 avg_mse_recon = mse_recon#.mean(axis=-1)
@@ -219,24 +222,26 @@ avg_mse_recon = mse_recon#.mean(axis=-1)
 ########################################
 # Plot reconstruction MSE
 ########################################
+
+styles = ['-', '--', '-.', ':']
+colors = ['#ffe74c', '#ff5964', '#38618c']
+labels = [r'$\bar{N}^{10^{-2}}_{\mathrm{ce}}=26$', r'$\check{N}^{10^{-2}}_{\mathrm{ce}}=142$', r'$\tilde{N}^{10^{-2}}_{\mathrm{ce}}=16$']
+
 fig, ax = plt.subplots(figsize=(3.15, 3))
 
-ax.plot(ris_num_configs_range, np.mean(mse_recon_true, axis=-1), color='black', linewidth=1.5, linestyle='-')
-#ax.fill_between(ris_num_configs_range, np.percentile(mse_recon_true, 25, axis=-1), np.percentile(mse_recon_true, 75, axis=-1), color='black', alpha=0.5)
-ax.fill_between(ris_num_configs_range, np.min(mse_recon_true, axis=-1), np.max(mse_recon_true, axis=-1), color='black', alpha=0.5)
+# Go through all number of configurations
+for cc in range(num_range):
 
-ax.plot(ris_num_configs_range, np.mean(avg_mse_recon, axis=-1), linewidth=1.5, linestyle='--')
-#ax.fill_between(ris_num_configs_range, np.percentile(avg_mse_recon, 25, axis=-1), np.percentile(avg_mse_recon, 75, axis=-1), alpha=0.5)
-ax.fill_between(ris_num_configs_range, np.min(avg_mse_recon, axis=-1), np.max(avg_mse_recon, axis=-1), alpha=0.5)
+    ax.plot(snr_db_range, np.mean(avg_mse_recon[cc, :], axis=-1), linewidth=1.5, linestyle=styles[cc], color=colors[cc], label=labels[cc])
+    ax.fill_between(snr_db_range, np.percentile(avg_mse_recon[cc, :], 25, axis=-1), np.percentile(avg_mse_recon[cc, :], 75, axis=-1), alpha=0.5, color=colors[cc])
 
-ax.set_xlabel(r'number of configurations, $N_{\mathrm{ce}}$')
+ax.set_xlabel(r'$\mathrm{SNR}^{\rm DL}$ [dB]')
 ax.set_ylabel(r'reconstruction MSE')
 
 ax.set_yscale('log')
 
+ax.legend(fontsize='x-small', loc='best')
 ax.grid(color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
-
-#ax.legend(fontsize='x-small', loc='best')
 
 plt.tight_layout()
 

@@ -132,10 +132,10 @@ class RIS(Node):
         pos : ndarray of shape (3,)
             Position of the RIS in rectangular coordinates.
 
-        num_els_z : int
+        num_els_ver : int
             Number of elements along z-axis.
 
-        num_els_x : int
+        num_els_hor : int
             Number of elements along x-axis.
 
         wavelength : float
@@ -152,30 +152,28 @@ class RIS(Node):
             self,
             n: int = None,
             pos: np.ndarray = None,
-            num_els_z: int = None,
-            num_els_x: int = None,
+            num_els_ver: int = None,
+            num_els_hor: int = None,
             wavelength: float = None,
             size_el: float = None,
-            num_configs: int = None,
-
+            num_ce_configs: int = None,
+            num_access_configs: int = None
     ):
+
         # Default values
         if n is None:
             n = 1
         if pos is None:
             pos = np.array([0, 0, 0])
-        if num_els_z is None:
-            num_els_z = 10
-        if num_els_x is None:
-            num_els_x = 10
+        if num_els_ver is None:
+            num_els_ver = 10
+        if num_els_hor is None:
+            num_els_hor = 10
         if wavelength is None:
             carrier_frequency = 3e9
             wavelength = speed_of_light / carrier_frequency
         if size_el is None:
-            size_el = wavelength
-        if num_configs is None:
-            num_configs = 4
-
+            size_el = wavelength/2
 
         # Initialize the parent, considering that the antenna gain of the ris is 0.0,
         # max_pow and noise_power are -np.inf,
@@ -183,50 +181,33 @@ class RIS(Node):
         super().__init__(n, pos, 0.0, -np.inf)
         # In this way every ris instantiated is equal to the others
 
-        # Instance variables
-        self.num_els_z = num_els_z  # vertical number of elements
-        self.num_els_x = num_els_x  # horizontal number of elements
-        self.num_els = num_els_z * num_els_x  # total number of elements
-        self.size_el = wavelength
-        self.num_configs = num_configs  # number of configurations
-
-        # # Store index of elements considering total number
-        # self.els_range = np.arange(self.num_els)
+        # Instance general parameters
+        self.num_els_ver = num_els_ver  # vertical number of elements
+        self.num_els_hor = num_els_hor  # horizontal number of elements
+        self.num_els = num_els_ver * num_els_hor  # total number of elements
+        self.size_el = size_el
 
         # Compute RIS sizes
-        self.size_z = num_els_z * self.size_el  # vertical size [m]
-        self.size_x = num_els_x * self.size_el  # horizontal size [m]
+        self.size_z = num_els_ver * self.size_el  # vertical size [m]
+        self.size_x = num_els_hor * self.size_el  # horizontal size [m]
         self.area = self.size_z * self.size_x   # area [m^2]
 
-        # # Organizing elements over the RIS
-        # self.id_els = self.indexing_els()
-        # self.pos_els = self.positioning_els()
-
         # Configure RIS
-        self.angular_resolution = None
-        self.set_angular_resolution()
+        self.num_ce_configs = num_ce_configs  # number of CE configurations
+        self.num_access_configs = num_access_configs  # number of access configurations
 
-        self.configs = None
-        self.set_configurations()
+        self.ce_codebook = None
+        self.access_codebook = None
 
-    def set_angular_resolution(self):
-        """Set RIS angular resolution. The observation space is ever considered to be 0 to pi/2 (half-plane) given our
-        system setup.
+        # Configuration estimation codebook
+        if self.num_ce_configs is not None:
+            self.get_ce_codebook()
 
-        Returns
-        -------
-        angular_resolution : float
-            RIS angular resolution in radians given the number of configurations and uniform division of the observation
-            space.
+        # Access codebook
+        if self.num_access_configs is not None:
+            self.get_access_codebook()
 
-        Example
-        -------
-        For num_configs = 4, angular_resolution evaluates to pi/8.
-
-        """
-        self.angular_resolution = ((np.pi / 2) - 0) / self.num_configs
-
-    def set_configurations(self):
+    def set_ce_codebook(self, num_ce_configs=None):
         """Set configurations offered by the RIS.
 
         Returns
@@ -243,131 +224,42 @@ class RIS(Node):
 
         0 and pi/2 are not included. Note that the observation space is divided into 5 zones.
         """
-        configs = np.arange(self.angular_resolution / 2, np.pi / 2, self.angular_resolution)
+        if num_ce_configs is not None:
+            self.num_ce_configs = num_ce_configs
 
-        assert len(configs) == self.num_configs, "Cardinality of configurations does not meet the number of configurations!"
+        self.ce_codebook = np.linspace(0, np.pi / 2, self.num_ce_configs)
 
-        self.configs = configs
+    def get_ce_codebook(self):
+        return self.set_ce_codebook
+
+    def set_access_codebook(self, num_access_configs=None):
+        """Set configurations offered by the RIS.
+
+        Returns
+        -------
+        set_configs : ndarray of shape (self.num_configs,)
+            Discrete set of configurations containing all possible angles (theta_s) in radians in which the RIS can
+            steer the incoming signal.
+
+        Example
+        -------
+        For S = 4, angular resolution is pi/8. The set of configurations evaluates to:
+
+                                 set_configs = [1/2, 3/2, 5/2, 7/2] * pi/8
+
+        0 and pi/2 are not included. Note that the observation space is divided into 5 zones.
+        """
+        if num_access_configs is not None:
+            self.num_access_configs = num_access_configs
+
+        # Compute step
+        step = np.pi / 2 / self.num_access_configs
+
+        self.access_codebook = np.arange(step/2, np.pi / 2, step)
+
+    def get_access_codebook(self):
+        return self.access_codebook
 
     def __repr__(self):
         return f'RIS-{self.n}'
 
-
-    # def indexing_els(self):
-    #     """Define an array of tuples where each entry represents the ID of an element.
-    #
-    #     Returns
-    #     -------
-    #     id_els : ndarray of tuples of shape (self.num_els)
-    #         Each ndarray entry has a tuple (id_v, id_h), which indexes the elements arranged in a planar array. Vertical
-    #         index is given as id_v, while horizontal index is id_h.
-    #
-    #     Example
-    #     -------
-    #     For a num_els_v = 3 x num_els_h = 3 RIS, the elements are indexed as follows:
-    #
-    #                                             (2,0) -- (2,1) -- (2,2)
-    #                                             (1,0) -- (1,1) -- (1,2)
-    #                                             (0,0) -- (0,1) -- (0,2),
-    #
-    #     the corresponding id_els should contain:
-    #
-    #                     id_els = [(0,0), (0,1), (0,2), (1,0), (1,1), (1,2), (2,0), (2,1), (2,2)].
-    #
-    #     While the respective enumeration of the elements is:
-    #
-    #                                                 6 -- 7 -- 8
-    #                                                 3 -- 4 -- 5
-    #                                                 0 -- 1 -- 2,
-    #
-    #     the enumeration is stored at:
-    #
-    #                                         self.els_range = np.arange(num_els).
-    #
-    #     Therefore, id_els and self.els_range are two different index methods for the elements. The former is used to
-    #     characterize the geometrical features of each element, while the latter is used for storage purposes.
-    #     """
-    #     # Get vertical ids
-    #     id_v = self.els_range // self.num_els_v
-    #
-    #     # Get horizontal ids
-    #     id_h = np.mod(self.els_range, self.num_els_h)
-    #
-    #     # Get array of tuples with complete id
-    #     id_els = [(id_v[el], id_h[el]) for el in self.els_range]
-    #
-    #     return id_els
-    #
-    # def positioning_els(self):
-    #     """Compute position of each element in the planar array.
-    #
-    #     Returns
-    #     -------
-    #
-    #     """
-    #     # Compute offsets
-    #     offset_x = (self.num_els_h - 1) * self.size_el / 2
-    #     offset_z = (self.num_els_v - 1) * self.size_el / 2
-    #
-    #     # Prepare to store the 3D position vector of each element
-    #     pos_els = np.zeros((self.num_els, 3))
-    #
-    #     # Go through all elements
-    #     for el in self.els_range:
-    #         pos_els[el, 0] = (self.id_els[el][1] * self.size_el) - offset_x
-    #         pos_els[el, 2] = (self.id_els[el][0] * self.size_el) - offset_z
-    #
-    #     return pos_els
-    #
-    # def plot(self):
-    #     """Plot RIS along with the index of each element.
-    #
-    #     Returns
-    #     -------
-    #     None.
-    #
-    #     """
-    #     fig, ax = plt.subplots()
-    #
-    #     # Go through all elements
-    #     for el in self.els_range:
-    #         ax.plot(self.pos_els[el, 0], self.pos_els[el, 2], 'x', color='black')
-    #         ax.text(self.pos_els[el, 0] - 0.003, self.pos_els[el, 2] - 0.0075, str(self.id_els[el]))
-    #
-    #     # Plot origin
-    #     ax.plot(0, 0, '.', color='black')
-    #
-    #     ax.set_xlim([np.min(self.pos_els[:, 0]) - 0.05, np.max(self.pos_els[:, 0]) + 0.05])
-    #     ax.set_ylim([np.min(self.pos_els[:, 2]) - 0.05, np.max(self.pos_els[:, 2]) + 0.05])
-    #
-    #     ax.set_xlabel("x [m]")
-    #     ax.set_ylabel("z [m]")
-    #
-    #     plt.show()
-
-# class RxNoise:
-#     """Represent the noise value at the physical receiver
-#     # TODO: match with ambient noise and noise figure
-#     """
-#
-#     def __init__(self, linear=None, dB=None, dBm: np.ndarray = np.array([-92.5])):
-#         if (linear is None) and (dB is None):
-#             self.dBm = dBm
-#             self.dB = dBm - 30
-#             self.linear = 10 ** (self.dB / 10)
-#         elif (linear is not None) and (dB is None):
-#             self.linear = linear
-#             if self.linear != 0:
-#                 self.dB = 10 * np.log10(self.linear)
-#                 self.dBm = 10 * np.log10(self.linear * 1e3)
-#             else:
-#                 self.dB = -np.inf
-#                 self.dBm = -np.inf
-#         else:
-#             self.dB = dB
-#             self.dBm = dB + 30
-#             self.linear = 10 ** (self.dB / 10)
-#
-#     def __repr__(self):
-#         return (f'noise({self.linear:.3e}, '
-#                 f'dB={self.dB:.1f}, dBm={self.dBm:.1f})')
