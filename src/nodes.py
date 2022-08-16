@@ -156,8 +156,8 @@ class RIS(Node):
             num_els_hor: int = None,
             wavelength: float = None,
             size_el: float = None,
-            num_ce_configs: int = None,
-            num_access_configs: int = None
+            # num_ce_configs: int = None,
+            # num_access_configs: int = None
     ):
 
         # Default values
@@ -192,74 +192,73 @@ class RIS(Node):
         self.size_x = num_els_hor * self.size_el  # horizontal size [m]
         self.area = self.size_z * self.size_x   # area [m^2]
 
-        # Configure RIS
-        self.num_ce_configs = num_ce_configs  # number of CE configurations
-        self.num_access_configs = num_access_configs  # number of access configurations
+        # # Configure RIS
+        # self.num_ce_configs = num_ce_configs  # number of CE configurations
+        # self.num_access_configs = num_access_configs  # number of access configurations
+        #
+        # self.ce_codebook = None
+        # self.access_codebook = None
+        #
+        # # Configuration estimation codebook
+        # if self.num_ce_configs is not None:
+        #     self.set_ce_codebook(self.num_ce_configs)
+        #
+        # # Access codebook
+        # if self.num_access_configs is not None:
+        #     self.set_access_codebook(self.num_access_configs)
 
-        self.ce_codebook = None
-        self.access_codebook = None
-
-        # Configuration estimation codebook
-        if self.num_ce_configs is not None:
-            self.get_ce_codebook()
-
-        # Access codebook
-        if self.num_access_configs is not None:
-            self.get_access_codebook()
-
-    def set_ce_codebook(self, num_ce_configs=None):
-        """Set configurations offered by the RIS.
-
-        Returns
-        -------
-        set_configs : ndarray of shape (self.num_configs,)
-            Discrete set of configurations containing all possible angles (theta_s) in radians in which the RIS can
-            steer the incoming signal.
-
-        Example
-        -------
-        For S = 4, angular resolution is pi/8. The set of configurations evaluates to:
-
-                                 set_configs = [1/2, 3/2, 5/2, 7/2] * pi/8
-
-        0 and pi/2 are not included. Note that the observation space is divided into 5 zones.
-        """
-        if num_ce_configs is not None:
-            self.num_ce_configs = num_ce_configs
-
-        self.ce_codebook = np.linspace(0, np.pi / 2, self.num_ce_configs)
-
-    def get_ce_codebook(self):
-        return self.set_ce_codebook
-
-    def set_access_codebook(self, num_access_configs=None):
-        """Set configurations offered by the RIS.
-
-        Returns
-        -------
-        set_configs : ndarray of shape (self.num_configs,)
-            Discrete set of configurations containing all possible angles (theta_s) in radians in which the RIS can
-            steer the incoming signal.
-
-        Example
-        -------
-        For S = 4, angular resolution is pi/8. The set of configurations evaluates to:
-
-                                 set_configs = [1/2, 3/2, 5/2, 7/2] * pi/8
-
-        0 and pi/2 are not included. Note that the observation space is divided into 5 zones.
-        """
-        if num_access_configs is not None:
-            self.num_access_configs = num_access_configs
-
-        # Compute step
-        step = np.pi / 2 / self.num_access_configs
-
-        self.access_codebook = np.arange(step/2, np.pi / 2, step)
-
-    def get_access_codebook(self):
-        return self.access_codebook
+    # def set_ce_codebook(self, num_ce_configs=None):
+    #     """Set configurations offered by the RIS.
+    #
+    #     Returns
+    #     -------
+    #     set_configs : ndarray of shape (self.num_configs,)
+    #         Discrete set of configurations containing all possible angles (theta_s) in radians in which the RIS can
+    #         steer the incoming signal.
+    #
+    #     Example
+    #     -------
+    #     For S = 4, angular resolution is pi/8. The set of configurations evaluates to:
+    #
+    #                              set_configs = [1/2, 3/2, 5/2, 7/2] * pi/8
+    #
+    #     0 and pi/2 are not included. Note that the observation space is divided into 5 zones.
+    #     """
+    #     if num_ce_configs is not None:
+    #         self.num_ce_configs = num_ce_configs
+    #
+    #     self.ce_codebook = np.linspace(0, np.pi / 2, self.num_ce_configs)
+    #
+    # def get_ce_codebook(self):
+    #     return self.ce_codebook
+    #
+    # def set_access_codebook(self, num_access_configs=None):
+    #     """Set configurations offered by the RIS.
+    #
+    #     Returns
+    #     -------
+    #     set_configs : ndarray of shape (self.num_configs,)
+    #         Discrete set of configurations containing all possible angles (theta_s) in radians in which the RIS can
+    #         steer the incoming signal.
+    #
+    #     Example
+    #     -------
+    #     For S = 4, angular resolution is pi/8. The set of configurations evaluates to:
+    #
+    #                              set_configs = [1/2, 3/2, 5/2, 7/2] * pi/8
+    #
+    #     0 and pi/2 are not included. Note that the observation space is divided into 5 zones.
+    #     """
+    #     if num_access_configs is not None:
+    #         self.num_access_configs = num_access_configs
+    #
+    #     # Compute step
+    #     step = np.pi / 2 / self.num_access_configs
+    #
+    #     self.access_codebook = np.arange(step/2, np.pi / 2, step)
+    #
+    # def get_access_codebook(self):
+    #     return self.access_codebook
 
     def __repr__(self):
         return f'RIS-{self.n}'
-

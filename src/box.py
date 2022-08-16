@@ -1,14 +1,14 @@
-#!/usr/bin/env python3
-# filename "cells.py"
-
 import numpy as np
-import environment.common as common
-from environment.nodes import UE, BS, RIS
-import matplotlib.pyplot as plt
-from collections import OrderedDict
-from matplotlib import rc
+
 from scipy.constants import speed_of_light
 
+import src.common as common
+from src.nodes import UE, BS, RIS
+
+#from collections import OrderedDict
+
+import matplotlib.pyplot as plt
+from matplotlib import rc
 
 class Box:
     """Creates an environment defined by a box of UEs.
@@ -20,10 +20,10 @@ class Box:
         minimum_distance : float
             Minimum distance with respect to the RIS.
 
-        carrier_frequency : float 
+        carrier_frequency : float
             Central frequency in Hertz.
 
-        bandwidth : float 
+        bandwidth : float
             Bandwidth in Hertz.
 
     """
@@ -93,53 +93,13 @@ class Box:
         # Append BS
         self.bs = BS(1, pos, gain, max_pow)
 
-    def place_ue(
-            self,
-            n: int,
-            gain: float = None,
-            max_pow: float = None
-    ):
-        """Place a predefined number n of UEs in the box. If a new set of UE is set the old one is canceled.
-
-        Parameters
-        ----------
-
-        n : int
-            Number of UEs to be placed.
-
-        gain : float
-            UE antenna gain G_k.
-
-        max_pow : float
-           Maximum power available at each UE.
-        """
-        # Control on input
-        if not isinstance(n, int) or (n <= 0):  # Cannot add a negative number of nodes
-            raise ValueError('n must be int >= 0.')
-
-        # Compute distances
-        distances = np.sqrt(self.rng.rand(n, 1) * (self.maximum_distance**2 - self.minimum_distance**2) + self.minimum_distance**2)
-        distances = np.squeeze(distances)
-
-        # Compute angles
-        angles = np.pi/2 * self.rng.rand(n, 1)
-        angles = np.squeeze(angles)
-
-        # Compute pos
-        pos = np.zeros((n, 3))
-        pos[:, 0] = distances * np.sin(angles)
-        pos[:, 1] = distances * np.cos(angles)
-
-        # Append UEs
-        self.ue = UE(n, pos, gain, max_pow)
-
     def place_ris(self,
                   pos: np.ndarray = None,
                   num_els_ver: int = None,
                   num_els_hor: int = None,
                   size_el: float = None,
-                  num_ce_configs: int = None,
-                  num_access_configs: int = None
+                  # num_ce_configs: int = None,
+                  # num_access_configs: int = None
                   ):
         """Place a single RIS in the environment. If a new RIS is set the old one is canceled.
 
@@ -169,11 +129,51 @@ class Box:
             num_els_hor=num_els_hor,
             wavelength=self.wavelength,
             size_el=size_el,
-            num_ce_configs=num_ce_configs,
-            num_access_configs=num_access_configs
+            # num_ce_configs=num_ce_configs,
+            # num_access_configs=num_access_configs
         )
 
-    def get_ce_channel_gains(self):
+    def place_ue(
+            self,
+            n: int,
+            gain: float = None,
+            max_pow: float = None
+    ):
+        """Place a predefined number n of UEs in the box. If a new set of UE is set the old one is canceled.
+
+        Parameters
+        ----------
+
+        n : int
+            Number of UEs to be placed.
+
+        gain : float
+            UE antenna gain G_k.
+
+        max_pow : float
+           Maximum power available at each UE.
+        """
+        # # Control on input
+        # if not isinstance(n, int) or (n <= 0):  # Cannot add a negative number of nodes
+        #     raise ValueError('n must be int >= 0.')
+
+        # Compute distances
+        distances = np.sqrt(self.rng.rand(n, 1) * (self.maximum_distance**2 - self.minimum_distance**2) + self.minimum_distance**2)
+        distances = np.squeeze(distances)
+
+        # Compute angles
+        angles = np.pi/2 * self.rng.rand(n, 1)
+        angles = np.squeeze(angles)
+
+        # Compute pos
+        pos = np.zeros((n, 3))
+        pos[:, 0] = distances * np.sin(angles)
+        pos[:, 1] = distances * np.cos(angles)
+
+        # Append UEs
+        self.ue = UE(n, pos, gain, max_pow)
+
+    def get_dl_channel_gains(self, codebook, mask=None):
         """Calculate channel gains for the configuration estimation phase.
 
         Returns
@@ -181,44 +181,46 @@ class Box:
         channel_gains_ce: ndarray of shape (num_ce_configs, num_ues)
             Downlink channel gains between the BS and UEs given each RIS configuration.
         """
+
+        if mask is not None:
+            ue_distances = self.ue.distances[mask]
+            ue_angles = self.ue.angles[mask]
+        else:
+            ue_distances = self.ue.distances
+            ue_angles = self.ue.angles
+
+        if isinstance(ue_distances, float):
+            ue_distances = np.array([ue_distances, ])
+            ue_angles = np.array([ue_angles, ])
+
+        if isinstance(codebook, float):
+            codebook = np.array([codebook,])
+
         # Compute constant term
         num = self.bs.gain * self.ue.gain * (self.ris.size_el * self.ris.size_el)**2
-        den = (4 * np.pi * self.bs.distance * self.ue.distances)**2
-
-        const = num/den
+        den = (4 * np.pi * self.bs.distance * ue_distances)**2
 
         # Compute DL pathloss component of shape (num_ues, )
-        pathloss = const * np.cos(self.bs.angle)**2
+        pathloss = num / den * np.cos(self.bs.angle)**2
 
-        # Compute fundamental frequency
-        fundamental_freq = self.ris.size_el / self.wavelength
+        # Compute propagation phase-shift
+        propagation_phase_shift =  - (self.bs.distance + ue_distances -
+        (np.sin(self.bs.angle) - np.sin(ue_angles)) * ((self.ris.num_els_hor + 1) / 2) * self.ris.size_el)
 
-        # Compute term 1
-        term1 = np.sqrt(pathloss) * self.ris.num_els_ver
-
-        # Compute term 2
-        term2 = np.exp(1j * 2 * np.pi * fundamental_freq * ((self.bs.distance + self.ue.distances) / self.ris.size_el))
-
-        # Compute term 3
-        term3 = np.exp(
-            -1j * 2 * np.pi * fundamental_freq * (self.ris.num_els_hor + 1) / 2 * (np.sin(self.bs.angle) - np.sin(self.ue.angles))
-        )
-
-        # Compute term 4
+        # Compute array factor
         enumeration_num_els_hor = np.arange(1, self.ris.num_els_hor + 1)
+        #breakpoint()
+        array_factor = np.exp(1j * self.wavenumber * self.ris.size_el * enumeration_num_els_hor[:, None, None] *
+        (np.sin(ue_angles)[:, None] - np.sin(codebook[None, :])))
 
-        term4 = np.exp(1j * 2 * np.pi * fundamental_freq * enumeration_num_els_hor[:, None, None] * (
-                    np.sin(self.ue.angles)[:, None] - np.sin(self.ris.get_ce_codebook())[None, :]))
-        term4 = term4.transpose(1, 0, 2)
-
-        term4 = term4[:, :, :].sum(axis=1)
+        array_factor = array_factor.sum(axis=0)
 
         # Compute channel gains
-        channel_gains_ce = term1[:, None] * term2[:, None] * term3[:, None] * term4
+        channel_gains = np.sqrt(pathloss[:, None]) * np.exp(1j * self.wavenumber * propagation_phase_shift)[:, None] * array_factor
 
-        return channel_gains_ce
+        return channel_gains
 
-    def get_ul_channel_gains(self):
+    def get_ul_channel_gains(self, codebook, mask=None):
         """Calculate uplink channel gains.
 
         Returns
@@ -226,38 +228,44 @@ class Box:
         channel_gains_ul : ndarray of shape (num_access_configs, num_ues)
             Uplink channel gains between the BS and UEs given each RIS configuration.
         """
+
+        if mask is not None:
+            ue_distances = self.ue.distances[mask]
+            ue_angles = self.ue.angles[mask]
+        else:
+            ue_distances = self.ue.distances
+            ue_angles = self.ue.angles
+
+        if isinstance(ue_distances, float):
+            ue_distances = np.array([ue_distances, ])
+            ue_angles = np.array([ue_angles, ])
+
+        if isinstance(codebook, float):
+            codebook = np.array([codebook,])
+
         # Compute constant term
         num = self.bs.gain * self.ue.gain * (self.ris.size_el * self.ris.size_el)**2
-        den = (4 * np.pi * self.bs.distance * self.ue.distances)**2
-
-        const = num/den
+        den = (4 * np.pi * self.bs.distance * ue_distances)**2
 
         # Compute DL pathloss component of shape (num_ues, )
-        pathloss_dl = const * np.cos(self.bs.angle)**2
+        pathloss = num / den * np.cos(ue_angles)**2
 
-        # Compute UL pathloss component of shape (num_ues, )
-        pathloss_ul = const * np.cos(self.ue.angles)**2
+        # Compute propagation phase-shift
+        propagation_phase_shift =  - (self.bs.distance + ue_distances -
+        (np.sin(self.bs.angle) - np.sin(ue_angles)) * ((self.ris.num_els_hor + 1) / 2) * self.ris.size_el)
 
-        # Compute constant phase component of shape (num_ues, )
-        distances_sum = (self.bs.distance + self.ue.distances)
-        disagreement = (np.sin(self.bs.angle) - np.sin(self.ue.angles)) * ((self.ris.num_els_hor + 1) / 2) * self.ris.size_el
-
-        phi = - self.wavenumber * (distances_sum - disagreement)
-
-        # Compute array factor of shape (num_configs, num_ues)
+        # Compute array factor
         enumeration_num_els_hor = np.arange(1, self.ris.num_els_hor + 1)
-        sine_differences = (np.sin(self.ue.angles[np.newaxis, :, np.newaxis]) - np.sin(self.ris.configs[:, np.newaxis, np.newaxis]))
 
-        argument = self.wavenumber * sine_differences * enumeration_num_els_hor[np.newaxis, np.newaxis, :] * self.ris.size_el
+        array_factor = np.exp(1j * self.wavenumber * self.ris.size_el * enumeration_num_els_hor[:, None, None] *
+        (np.sin(ue_angles)[:, None] - np.sin(codebook[None, :])))
 
-        array_factor_dl = self.ris.num_els_ver * np.sum(np.exp(+1j * argument), axis=-1)
-        array_factor_ul = array_factor_dl.conj()
+        array_factor = array_factor.sum(axis=0)
 
-        # Compute channel gains of shape (num_configs, num_ues)
-        channel_gains_dl = np.sqrt(pathloss_dl[np.newaxis, :]) * np.exp(+1j * phi[np.newaxis, :]) * array_factor_dl
-        channel_gains_ul = np.sqrt(pathloss_ul[np.newaxis, :]) * np.exp(-1j * phi[np.newaxis, :]) * array_factor_ul
+        # Compute channel gains
+        channel_gains = np.sqrt(pathloss[:, None]) * np.exp(-1j * self.wavenumber * propagation_phase_shift)[:, None] * np.conj(array_factor)
 
-        return channel_gains_dl, channel_gains_ul
+        return channel_gains
 
 
 

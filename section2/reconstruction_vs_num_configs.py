@@ -27,7 +27,6 @@ matplotlib.rc('font', **{'family': 'sans serif', 'serif': ['Computer Modern'], '
 # System Parameters
 ########################################
 
-
 # Electromagnetic
 carrier_frequency = 3e9
 wavelength = speed_of_light / carrier_frequency
@@ -113,7 +112,7 @@ channel_gains_true = dl_channel_gains(
 ########################################
 
 # Define MVU error tolerance
-tolerance = 10e-12
+tolerance = 10e-3
 
 # Define SNR
 snr_db = 0
@@ -241,4 +240,3 @@ ax.grid(color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
 plt.tight_layout()
 
 plt.show()
-

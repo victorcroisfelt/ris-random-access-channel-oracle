@@ -17,9 +17,16 @@ import scipy.integrate as integrate
 
 from tqdm import trange
 
-plt.rc('text', usetex=True)
-plt.rc('text.latex', preamble=r'\usepackage{amsmath} \usepackage{amsmath} \usepackage{amssymb}')
-matplotlib.rc('font', **{'family': 'sans serif', 'serif': ['Computer Modern'], 'size': 8})
+ # LaTeX type definitions
+plt.rcParams.update({
+    'text.usetex': True,
+    'font.family': "serif",
+    'font.serif': ["Times"]
+    })
+
+#plt.rc('font', **{'family': 'serif', 'serif': ['Computer Modern'], 'size': 14})
+#plt.rc('text', usetex=True)
+plt.rc('text.latex', preamble=r'\usepackage{amssymb,amsmath,amsfonts,amsthm,mathtools,cuted,bbold} \usepackage[cmintegrals]{newtxmath}')
 
 ########################################
 # Private functions
@@ -141,15 +148,15 @@ ris_num_els_hor = 10
 # Size of each element
 ris_size_el = wavelength/2
 
-# Define specific positions for the UEs
-ue_angles = np.linspace(0, np.pi/2)
-
 ########################################
 # Evaluating maximum frequency
 ########################################
 
-# Compute fundamental frequency
+# Define fundamental frequency
 fundamental_freq = 0.5
+
+# Define range of UE's angle
+ue_angles = np.linspace(0, np.pi/2)
 
 # Compute average power
 avg_power = average_power(ue_angles, ris_num_els_hor, fundamental_freq)
@@ -157,8 +164,8 @@ avg_power = average_power(ue_angles, ris_num_els_hor, fundamental_freq)
 # Define range of epsilon
 epsilon_range = 10**(-np.array([1, 2, 3], dtype=float))
 
-# Prepare to save results
-result = np.zeros((epsilon_range.size, ue_angles.size))
+# Prepare to save smallest symmetric interval
+interval = np.zeros((epsilon_range.size, ue_angles.size))
 
 # Go through all UE's angles
 for ue in trange(ue_angles.size, desc='Simulating', unit='positions'):
@@ -166,30 +173,39 @@ for ue in trange(ue_angles.size, desc='Simulating', unit='positions'):
     # Extract current angle
     angle = ue_angles[ue]
 
-    # Define complex coefficient indexes
-    complex_coeff_idxs = np.arange(-400, 400)
-
     # Store complex coefficients
     complex_coeffs = {}
 
-    # Go through all indexes
-    for ii in complex_coeff_idxs:
+    # Compute basic complex coefficient
+    complex_coeffs[0] = fourier_complex_coeff(angle, ris_num_els_hor, fundamental_freq, 0)
+    complex_coeffs[-1] = fourier_complex_coeff(angle, ris_num_els_hor, fundamental_freq, -1)
+    complex_coeffs[+1] = fourier_complex_coeff(angle, ris_num_els_hor, fundamental_freq, +1)
 
-        # Compute complex coefficient
-        complex_coeffs[ii] = fourier_complex_coeff(angle, ris_num_els_hor, fundamental_freq, ii)
+    # Compute temp index
+    coeff_idx = 2
 
-    # Evaluate
-    true_ratio = (np.abs(list(complex_coeffs.values())) ** 2).sum() / avg_power[ue]
+    while True:
 
-    if true_ratio < 1 - 10**(-3):
-        print('error')
-        break
+        # Evaluate coservation efficiency
+        true_ratio = (np.abs(list(complex_coeffs.values())) ** 2).sum() / avg_power[ue]
+
+        if true_ratio < 1 - epsilon_range[-1]:
+
+            # Compute complex coefficients
+            complex_coeffs[+coeff_idx] = fourier_complex_coeff(angle, ris_num_els_hor, fundamental_freq, +coeff_idx)
+            complex_coeffs[-coeff_idx] = fourier_complex_coeff(angle, ris_num_els_hor, fundamental_freq, -coeff_idx)
+
+            # Update temp index
+            coeff_idx += 1
+
+        else:
+            break
 
     # Create a copy
     epsilon_list = list(epsilon_range)
 
-    # Create range bounds
-    bound = 1
+    # Create temp variable
+    coeff_idx = 1
 
     # Store temporally the results
     temp = []
@@ -197,7 +213,7 @@ for ue in trange(ue_angles.size, desc='Simulating', unit='positions'):
     while True:
 
         # Indexes
-        rang = np.arange(-bound, bound+1)
+        rang = np.arange(-coeff_idx, coeff_idx+1)
 
         # Get values
         values = [complex_coeffs[ii] for ii in rang]
@@ -208,55 +224,80 @@ for ue in trange(ue_angles.size, desc='Simulating', unit='positions'):
         # Ratio
         ratio = approx_avg_power/avg_power[ue]
 
-        if len(epsilon_list) > 0:
+        if len(epsilon_list) == 1:
+
+            # Store coeff_idx
+            temp.append(-list(complex_coeffs.keys())[-1])
+
+            # Update list
+            del epsilon_list[0]
+
+        else:
 
             if ratio > (1 - epsilon_list[0]):
 
-                # Store bound
-                temp.append(bound)
+                # Store coeff_idx
+                temp.append(coeff_idx)
 
                 # Update list
                 del epsilon_list[0]
 
-        else:
+        if len(epsilon_list) == 0:
             break
 
-        # Update bound
-        bound += 1
+        # Update temp var
+        coeff_idx += 1
 
-    # Store simtion results
-    result[:, ue] = temp
+    # Store simulation result
+    interval[:, ue] = temp
 
-np.savez('result',
-         result=result)
+# Compute approximated maximum frequency according to Method 1
+appr_max_freq_1 = fundamental_freq * ris_num_els_hor
+
+# Compute approximated maximum frequency according to Method 2
+appr_max_freq_2 = fundamental_freq * interval
+
+#np.savez('max_freq', result=result)
 
 ########################################
 # Plot
 ########################################
-fig, ax = plt.subplots(figsize=(3.15, 3/2))
+fig, ax = plt.subplots(figsize=(6.5, 3))
 
 styles = ['--', '-.', ':']
-labels = ['10^{-1}', '10^{-2}', '10^{-3}']
+labels = [r'$\tilde{F}^{10^{-1}}_{\max}$ in (23)', r'$\tilde{F}^{10^{-2}}_{\max}$ in (23)', r'$\tilde{F}^{10^{-3}}_{\max}$ in (23)']
 
-ax.plot(np.rad2deg(ue_angles), ris_num_els_hor * np.ones_like(ue_angles), linestyle='-', color='black', linewidth=1.5, label=r'$\tilde{I}=M_x=10$')
+ax.plot(np.rad2deg(ue_angles), appr_max_freq_1 * np.ones_like(ue_angles), linestyle='-', color='black', linewidth=1.5, label=r'$\tilde{F}_{\max}$ in (16)')
 
 # Go through all epsilons
 for ii, epsilon in enumerate(epsilon_range):
-    ax.plot(np.rad2deg(ue_angles), result[ii, :], linestyle=styles[ii], color='black', linewidth=1.5, label=r'$\epsilon=' + str(labels[ii]) + '$')
+    ax.plot(np.rad2deg(ue_angles), appr_max_freq_2[ii, :], linestyle=styles[ii], color='black', linewidth=1.5, label=labels[ii])
 
-#ax.set_yscale('log')
-
-ax.set_ylabel(r'interval, $I^{\epsilon}_k$')
-ax.set_xlabel(r"UE's angle, $\theta_k$ in degress")
+ax.set_ylabel('Approx. maximum \n frequency, ' + r'$\tilde{F}_{\max,k}$')
+ax.set_xlabel(r"UE's angle, $\theta_k$ in degrees")
 
 ax.set_xticks(np.arange(0, 100, 10))
 
+plt.xticks(fontsize=12)
+plt.yticks(fontsize=12)
+
 ax.set_yscale('log')
 
-ax.legend(fontsize='x-small', framealpha=0.5)
+ax.legend(fontsize='small', framealpha=0.5)
 
-ax.grid(color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
+ax.grid(color='#E9E9E9', linestyle=':', linewidth=1.0, alpha=0.5)
 
-plt.tight_layout()
+#plt.tight_layout()
+
+plt.subplots_adjust(
+    left = 0.125,
+    right = 0.99,
+    bottom = 0.175,
+    top = 0.95,
+    wspace = 0.5,
+    hspace = 0.05
+    )
+
+plt.savefig('max_freq.pdf', dpi='figure', format='pdf', transparent='True')
 
 plt.show()

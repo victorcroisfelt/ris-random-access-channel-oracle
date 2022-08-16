@@ -558,5 +558,3 @@ def collision_resolution_slotted(ue_access, buffered_access_attempts, gamma_th):
 #     throughput = success_attempts / num_active_ue
 #
 #     return throughput
-
-
