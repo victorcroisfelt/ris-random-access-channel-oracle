@@ -84,6 +84,9 @@ class Access(Block):
         # Extract number of UEs
         num_ues = ac_info.shape[0]
 
+        if num_repetitions > self.num_slots:
+            num_repetitions = self.num_slots
+
         # Prepare to save chosen access slots
         chosen_access_slots = {ac_slot: [] for ac_slot in range(self.num_slots)}
 
@@ -202,42 +205,6 @@ class Access(Block):
 
         return chosen_access_slots
 
-
-
-
-        # # Go through all number of access configurations
-        # for cc, num_access_configs in range(self):
-        #
-        #     # Prepare to store reconstructed channel gains
-        #     full_recon_channel_gains_access = np.empty((max_num_ues, num_access_configs), dtype=np.complex_)
-        #
-        #     # Go through all UEs
-        #     for ue in enumeration_max_num_ues:
-        #
-        #         # Store reconstructed channel gains
-        #         full_recon_channel_gains_access[ue, :] = f_real[ue](access_configs) + 1j * f_imag[ue](access_configs)
-        #
-        #     # Calculate absolute values
-        #     full_recon_absolutes_access = np.abs(full_recon_channel_gains_access)
-        #
-        #     # Prepare to save chosen access slots
-        #     access_choices[cc] = {key: [] for key in range(num_access_configs)}
-        #
-        #     # Choose access slots
-        #     if access_policy == 'strongest':
-        #
-        #         # Store UE choices
-        #         ue_choices = np.argmax(full_recon_absolutes_access, axis=-1)
-        #
-        #         # Go through all UEs
-        #         for ue in enumeration_max_num_ues:
-        #
-        #             # Go through all access slots chosen by that UE
-        #             try:
-        #                 for access in ue_choices[ue]:
-        #                     access_choices[cc][access].append(ue)
-        #             except:
-        #                 access_choices[cc][ue_choices[ue]].append(ue)
 
     def decoder(self, snr, num_ues, chosen_access_slots, buffered_access_attempts, messages):
 
