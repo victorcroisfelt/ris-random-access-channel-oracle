@@ -173,7 +173,7 @@ class Box:
         # Append UEs
         self.ue = UE(n, pos, gain, max_pow)
 
-    def get_dl_channel_gains(self, codebook, mask=None):
+    def get_channels(self, tx_power, noise_power, codebook, direction=None, mask=None):
         """Calculate channel gains for the configuration estimation phase.
 
         Returns
@@ -200,108 +200,101 @@ class Box:
         num = self.bs.gain * self.ue.gain * (self.ris.size_el * self.ris.size_el)**2
         den = (4 * np.pi * self.bs.distance * ue_distances)**2
 
-        # Compute DL pathloss component of shape (num_ues, )
-        pathloss = num / den * np.cos(self.bs.angle)**2
+        # Compute pathloss component of shape (num_ues, )
+        if direction == 'dl':
+            pathloss = num / den * np.cos(self.bs.angle)**2
+        elif direction == 'ul':
+            pathloss = num / den * np.cos(ue_angles)**2
 
         # Compute propagation phase-shift
-        propagation_phase_shift =  - (self.bs.distance + ue_distances -
-        (np.sin(self.bs.angle) - np.sin(ue_angles)) * ((self.ris.num_els_hor + 1) / 2) * self.ris.size_el)
+        propagation_angle = - (self.bs.distance + ue_distances -
+        ((np.sin(self.bs.angle) - np.sin(ue_angles)) * ((self.ris.num_els_hor + 1) / 2) * self.ris.size_el))
 
-        # Compute array factor
-        enumeration_num_els_hor = np.arange(1, self.ris.num_els_hor + 1)
-        #breakpoint()
-        array_factor = np.exp(1j * self.wavenumber * self.ris.size_el * enumeration_num_els_hor[:, None, None] *
-        (np.sin(ue_angles)[:, None] - np.sin(codebook[None, :])))
+        propagation_phase_shift = np.exp(1j * self.wavenumber * propagation_angle)
 
-        array_factor = array_factor.sum(axis=0)
-
-        # Compute channel gains
-        channel_gains = np.sqrt(pathloss[:, None]) * np.exp(1j * self.wavenumber * propagation_phase_shift)[:, None] * array_factor
-
-        return channel_gains
-
-    def get_ul_channel_gains(self, codebook, mask=None):
-        """Calculate uplink channel gains.
-
-        Returns
-        -------
-        channel_gains_ul : ndarray of shape (num_access_configs, num_ues)
-            Uplink channel gains between the BS and UEs given each RIS configuration.
-        """
-
-        if mask is not None:
-            ue_distances = self.ue.distances[mask]
-            ue_angles = self.ue.angles[mask]
-        else:
-            ue_distances = self.ue.distances
-            ue_angles = self.ue.angles
-
-        if isinstance(ue_distances, float):
-            ue_distances = np.array([ue_distances, ])
-            ue_angles = np.array([ue_angles, ])
-
-        if isinstance(codebook, float):
-            codebook = np.array([codebook,])
-
-        # Compute constant term
-        num = self.bs.gain * self.ue.gain * (self.ris.size_el * self.ris.size_el)**2
-        den = (4 * np.pi * self.bs.distance * ue_distances)**2
-
-        # Compute DL pathloss component of shape (num_ues, )
-        pathloss = num / den * np.cos(ue_angles)**2
-
-        # Compute propagation phase-shift
-        propagation_phase_shift =  - (self.bs.distance + ue_distances -
-        (np.sin(self.bs.angle) - np.sin(ue_angles)) * ((self.ris.num_els_hor + 1) / 2) * self.ris.size_el)
-
-        # Compute array factor
+        # Define enumeration of the number of horizontal elements
         enumeration_num_els_hor = np.arange(1, self.ris.num_els_hor + 1)
 
-        array_factor = np.exp(1j * self.wavenumber * self.ris.size_el * enumeration_num_els_hor[:, None, None] *
-        (np.sin(ue_angles)[:, None] - np.sin(codebook[None, :])))
+        # Compute phase-shift contribution
+        contribution = enumeration_num_els_hor[:, None, None] * (np.sin(ue_angles)[:, None] - np.sin(codebook[None, :]))
 
+        # Compute array factors
+        array_factor = np.exp(1j * self.wavenumber * self.ris.size_el * contribution)
         array_factor = array_factor.sum(axis=0)
 
-        # Compute channel gains
-        channel_gains = np.sqrt(pathloss[:, None]) * np.exp(-1j * self.wavenumber * propagation_phase_shift)[:, None] * np.conj(array_factor)
+        # Compute channels
+        channels = np.sqrt(pathloss[:, None]) * propagation_phase_shift[:, None] * array_factor
 
-        return channel_gains
+        if direction == 'ul':
+            channels = channels.conj()
+
+        # Normalize channels
+        channels *= np.sqrt(tx_power / noise_power)
+
+        return channels
 
 
 
 
-    # def get_channel_model_slotted_aloha(self):
-    #     """Get Downlink (DL) and Uplink (UL) channel gain.
+
+
+
+
+
+
+
+
+    # def get_ul_channels(self, codebook, ):
+    #     """Calculate uplink channel gains.
     #
     #     Returns
     #     -------
-    #     channel_gains_dl : ndarray of shape (1, num_ues)
-    #         Downlink channel gain between the BS and each UE.
-    #
-    #     channel_gains_ul : ndarray of shape (1, num_ues)
-    #         Uplink channel gain between the BS and each UE.
-    #
+    #     channel_gains_ul : ndarray of shape (num_access_configs, num_ues)
+    #         Uplink channel gains between the BS and UEs given each RIS configuration.
     #     """
+    #
+    #     if mask is not None:
+    #         ue_distances = self.ue.distances[mask]
+    #         ue_angles = self.ue.angles[mask]
+    #     else:
+    #         ue_distances = self.ue.distances
+    #         ue_angles = self.ue.angles
+    #
+    #     if isinstance(ue_distances, float):
+    #         ue_distances = np.array([ue_distances, ])
+    #         ue_angles = np.array([ue_angles, ])
+    #
+    #     if isinstance(codebook, float):
+    #         codebook = np.array([codebook,])
+    #
+    #     # Compute constant term
+    #     num = self.bs.gain * self.ue.gain * (self.ris.size_el * self.ris.size_el)**2
+    #     den = (4 * np.pi * self.bs.distance * ue_distances)**2
+    #
     #     # Compute DL pathloss component of shape (num_ues, )
-    #     distance_bs_ue = np.linalg.norm(self.ue.pos - self.bs.pos, axis=-1)
     #
-    #     num = self.bs.gain * self.ue.gain
-    #     den = (4 * np.pi * distance_bs_ue)**2
     #
-    #     pathloss_dl = num / den
+    #     # Compute propagation phase-shift
+    #     propagation_angle = - (self.bs.distance + ue_distances -
+    #     ((np.sin(self.bs.angle) - np.sin(ue_angles)) * ((self.ris.num_els_hor + 1) / 2) * self.ris.size_el))
     #
-    #     # Compute UL pathloss component of shape (num_ues, )
-    #     pathloss_ul = pathloss_dl
+    #     propagation_phase_shift = np.exp(-1j * self.wavenumber * propagation_angle)
     #
-    #     # Compute constant phase component of shape (num_ues, )
-    #     phi = - self.wavenumber * distance_bs_ue
+    #     # Define enumeration of the number of horizontal elements
+    #     enumeration_num_els_hor = np.arange(1, self.ris.num_els_hor + 1)
     #
-    #     # Compute channel gains of shape (num_configs, num_ues)
-    #     channel_gains_dl = np.sqrt(pathloss_dl[np.newaxis, :]) * np.exp(+1j * phi[np.newaxis, :])
-    #     channel_gains_ul = np.sqrt(pathloss_ul[np.newaxis, :]) * np.exp(-1j * phi[np.newaxis, :])
+    #     # Compute phase-shift contribution
+    #     contribution = enumeration_num_els_hor[:, None, None] * (np.sin(ue_angles)[:, None] - np.sin(codebook[None, :]))
     #
-    #     return channel_gains_dl, channel_gains_ul
+    #     # Compute array factors
+    #     array_factor = np.exp(-1j * self.wavenumber * self.ris.size_el * contribution)
+    #     array_factor = array_factor.sum(axis=0)
     #
+    #     # Compute channel gains
+    #     channel_gains = np.sqrt(pathloss[:, None]) * propagation_phase_shift[:, None] * array_factor
+    #
+    #     return channel_gains
+
     # def plot_scenario(self):
     #     """This method will plot the scenario of communication
     #     """

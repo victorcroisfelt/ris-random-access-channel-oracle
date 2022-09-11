@@ -3,19 +3,10 @@ import numpy as np
 from scipy import interpolate
 from scipy.constants import speed_of_light
 
-#from randomaccessfunc import collision_resolution_slotted
-
 from tqdm import trange
 
 from src.box import Box
 from src.frame import Frame
-
-import matplotlib
-import matplotlib.pyplot as plt
-
-plt.rc('text', usetex=True)
-plt.rc('text.latex', preamble=r'\usepackage{amsmath} \usepackage{amsmath} \usepackage{amssymb}')
-matplotlib.rc('font', **{'family': 'sans serif', 'serif': ['Computer Modern'], 'size': 8})
 
 ########################################
 # Preamble
@@ -45,6 +36,41 @@ ris_size = num_els_hor * size_el
 maximum_distance = 100
 minimum_distance = (2/wavelength) * ris_size**2
 
+# APs transmit power
+ap_tx_power_dbm = 20 # [dBm]
+ap_tx_power = 10**(ap_tx_power_dbm/10) / 1000
+
+# Noise power
+noise_power_dbm = -94 # [dBm]
+noise_power = 10**(noise_power_dbm/10) / 1000
+
+########################################
+# Simulation parameters
+########################################
+
+# Number of setups
+num_setups = int(1e4)
+
+# Define range on desired MVU estimator error tolerance
+range_mvu_error_dl = np.concatenate((np.array([np.nan, ]), 10**(-np.arange(1, 4, dtype=np.double))))
+
+# Define range on the number of training slots
+range_tr_num_slots = np.arange(10, 201)
+
+########################################
+# Simulation
+########################################
+
+# Test mask
+test_mask = np.linspace(0, np.pi/2, 100)
+
+# Prepare to store simulation results
+reconstruction_nmse = np.zeros((range_mvu_error_dl.size, range_tr_num_slots.size, num_setups), dtype=np.double)
+
+
+#####
+
+
 # Create a box
 box = Box(maximum_distance=maximum_distance, minimum_distance=minimum_distance, rng=np.random.RandomState(seed))
 
@@ -54,138 +80,70 @@ box.place_bs(distance=minimum_distance, zenith_angle_deg=45)
 # Place RIS
 box.place_ris(num_els_ver=num_els_ver, num_els_hor=num_els_hor, size_el=size_el)
 
-########################################
-# Simulation parameters
-########################################
-
-# Define SNR
-snr_db = 10
-snr = 10**(snr_db/10)
-
-# Number of setups
-num_setups = int(1e2)
-
-# Define range on desired MVU estimator error tolerance
-range_error_tol = 10**(-np.arange(1, 33, dtype=np.double))
-
-# Define range on the number of training slots
-range_tr_num_slots = np.arange(10, 601)
-
-# Minimum SNR threshold value for decoding
-decoding_snr = 1
-
-########################################
-# Simulation
-########################################
+# Place UEs
+box.place_ue(num_setups)
 
 # Initialize frame
 frame = Frame()
 
-# Test mask
-test_mask = np.linspace(0, np.pi/2, 1000)
+# Go through all number of training slots
+for ts in trange(range_tr_num_slots.size, unit=' ts', colour='green'):
 
-# Prepare to store simulation results
-true_reconstruction_nmse = np.zeros((range_tr_num_slots.size, num_setups), dtype=np.double)
-reconstruction_nmse = np.zeros((range_error_tol.size, range_tr_num_slots.size, num_setups), dtype=np.double)
+    # Extract current number of training slots
+    tr_num_slots = range_tr_num_slots[ts]
 
+    # Initialize training block
+    frame.init_training(tr_num_slots, None, 0, decoding_snr=None)
 
-#####
+    # Get DL training channels
+    tr_channels = box.get_channels(ap_tx_power, noise_power, frame.tr.codebook, direction='dl')
 
+    # Get true DL training channels for comparison
+    true_tr_channels = box.get_channels(ap_tx_power, noise_power, test_mask, direction='dl')
 
-# Go through all error tolerances
-for et in trange(range_error_tol.size, unit=" er"):
+    # Go through all error tolerances
+    for et in range(range_mvu_error_dl.size):
 
-    # Extract current error tolerance
-    error_tol = range_error_tol[et]
+        # Extract current error tolerance
+        mvu_error_dl = range_mvu_error_dl[et]
 
-    # Go through all number of training slots
-    for ts in range(range_tr_num_slots.size):
+        if np.isnan(mvu_error_dl):
 
-        # Extract current number of training slots
-        tr_num_slots = range_tr_num_slots[ts]
+            # Noiseless case
+            tr_hat_channels = tr_channels
 
-        # Define number of training channel uses
-        num_channel_uses = int(np.ceil(1 / (snr * error_tol)))
+        else:
 
-        # Initialize training block
-        frame.init_training(tr_num_slots, num_channel_uses, 0, decoding_snr)
+            # Generate equivalent estimation noise
+            noise = np.random.randn(num_setups, frame.tr.num_slots) + 1j * np.random.randn(num_setups, frame.tr.num_slots)
+            noise *= np.sqrt(1/2) * np.sqrt(mvu_error_dl)
 
-        # Place UEs
-        box.place_ue(num_setups)
-
-        ##################################################
-        # 1) DL training block
-        ##################################################
-
-        # Get DL training channel gains
-        tr_channel_gains = box.get_dl_channel_gains(frame.tr.codebook)
-
-        # Get DL training channel gains for comparison
-        true_tr_channel_gains = box.get_dl_channel_gains(test_mask)
-
-        # Generate equivalent estimation noise
-        noise = np.random.randn(num_setups, frame.tr.num_slots) + 1j * np.random.randn(num_setups, frame.tr.num_slots)
-        noise *= np.sqrt(1 / (2 * frame.tr.num_channel_uses * snr))
-
-        # Get estimated DL training channel gains
-        tr_hat_channel_gains = tr_channel_gains + noise
+            # Get estimated DL training channels
+            tr_hat_channels = tr_channels + noise
 
         # Obtain reflected-angular information
-        if et == 0:
-            true_hat_tr_channel_gains = np.empty((num_setups, test_mask.size), dtype=np.complex_)
-
-        hat_tr_channel_gains = np.empty((num_setups, test_mask.size), dtype=np.complex_)
+        hat_tr_channels = np.empty((num_setups, test_mask.size), dtype=np.complex_)
 
         # Go through each UE
         for ue in range(num_setups):
 
             # Apply spline reconstruction
-            interpolation_real = interpolate.interp1d(frame.tr.codebook, tr_hat_channel_gains[ue, :].real, kind='cubic')
-            interpolation_imag = interpolate.interp1d(frame.tr.codebook, tr_hat_channel_gains[ue, :].imag, kind='cubic')
+            interpolation_real = interpolate.interp1d(frame.tr.codebook, tr_hat_channels[ue, :].real, kind='cubic')
+            interpolation_imag = interpolate.interp1d(frame.tr.codebook, tr_hat_channels[ue, :].imag, kind='cubic')
 
             # Store interpolation results
-            hat_tr_channel_gains[ue] = interpolation_real(test_mask) + 1j * interpolation_imag(test_mask)
-
-            if et == 0:
-
-                # Apply spline reconstruction
-                interpolation_real = interpolate.interp1d(frame.tr.codebook, tr_channel_gains[ue, :].real, kind='cubic')
-                interpolation_imag = interpolate.interp1d(frame.tr.codebook, tr_channel_gains[ue, :].imag, kind='cubic')
-
-
-                true_hat_tr_channel_gains[ue] = interpolation_real(test_mask) + 1j * interpolation_imag(test_mask)
+            hat_tr_channels[ue] = interpolation_real(test_mask) + 1j * interpolation_imag(test_mask)
 
         # Compute recontruction NMSE
-        nmse = np.linalg.norm(true_tr_channel_gains - hat_tr_channel_gains, axis=-1)**2 / np.linalg.norm(true_tr_channel_gains, axis=-1)**2
+        nmse = np.linalg.norm(true_tr_channels - hat_tr_channels, axis=-1)**2 / np.linalg.norm(true_tr_channels, axis=-1)**2
 
         # Store it
         reconstruction_nmse[et, ts, :] = nmse
 
-        if et == 0:
-
-            nmse = np.linalg.norm(true_tr_channel_gains - true_hat_tr_channel_gains, axis=-1)**2 / np.linalg.norm(true_tr_channel_gains, axis=-1)**2
-            true_reconstruction_nmse[ts, :] = nmse
-
-##################################################
-# Plot
-##################################################
-fig, ax = plt.subplots()
-
-ax.plot(range_tr_num_slots, np.nanmean(true_reconstruction_nmse[:, :], axis=-1), linewidth=1.5, color='black')
-
-# Go through all error tolerances
-for et in range(range_error_tol.size):
-    ax.plot(range_tr_num_slots, np.nanmean(reconstruction_nmse[et, :, :], axis=-1), linewidth=1.5)
-
-ax.set_xlabel(r'number of training slots, $N_{\rm tr}$')
-ax.set_ylabel(r'NMSE')
-
-#ax.legend(fontsize='x-small', loc='best')
-
-ax.set_yscale('log')
-
-ax.grid(color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
-
-plt.tight_layout()
-
-plt.show()
+# Save data
+np.savez(
+    'data/evaluating_dl_training_block.npz',
+    reconstruction_nmse=reconstruction_nmse,
+    range_tr_num_slots=range_tr_num_slots,
+    range_mvu_error_dl=range_mvu_error_dl
+)
