@@ -32,7 +32,8 @@ styles = ['--', '-.', ':']
 labels = [
     r'$\tilde{F}^{10^{-1}}_{\max}$ in (23)',
     r'$\tilde{F}^{10^{-2}}_{\max}$ in (23)',
-    r'$\tilde{F}^{10^{-3}}_{\max}$ in (23)']
+    r'$\tilde{F}^{10^{-3}}_{\max}$ in (23)'
+    ]
 
 
 fig, ax = plt.subplots(figsize=(6.5, 3))
@@ -45,8 +46,8 @@ for ii, epsilon in enumerate(epsilon_range):
 
 #ax.set_ylabel('Approx. maximum \n frequency, ' + r'$\tilde{F}_{\max,k}$')
 
-ax.set_ylabel(r'approx. maximum frequency, $\tilde{F}_{\max,k}$')
-ax.set_xlabel(r"UE's angle, $\theta_k$ in degrees")
+ax.set_ylabel(r'approx. max. spatial frequency, $\tilde{F}_{\max,k}$')
+ax.set_xlabel(r"UE's angle, $\theta_k$")
 
 ax.set_xticks(np.arange(0, 100, 10))
 ax.xaxis.set_major_formatter(StrMethodFormatter(u"{x:.0f}°"))
@@ -60,20 +61,20 @@ ax.legend(framealpha=0.5)
 
 ax.grid(color='#E9E9E9', linestyle=':', linewidth=1.0, alpha=0.5)
 
-#plt.tight_layout()
+plt.tight_layout()
 
-plt.subplots_adjust(
-    left = 0.125,
-    right = 0.99,
-    bottom = 0.175,
-    top = 0.95,
-    wspace = 0.5,
-    hspace = 0.05
-    )
+# plt.subplots_adjust(
+#     left = 0.125,
+#     right = 0.99,
+#     bottom = 0.175,
+#     top = 0.95,
+#     wspace = 0.5,
+#     hspace = 0.05
+#     )
 
-#plt.savefig('max_freq.pdf', dpi='figure', format='pdf', transparent='True')
+plt.savefig('../figs/figure4.pdf', dpi='figure', format='pdf', transparent='True')
+
+tikzplotlib.save("figure4.tex")
+#tikzplotlib.save("figure4.tex", flavor="context")
 
 plt.show()
-
-#tikzplotlib.save("figure3.tex")
-#tikzplotlib.save("figure3.tex", flavor="context")

@@ -99,3 +99,5 @@ plt.savefig('../figs/figure3.pdf', dpi='figure', format='pdf', transparent='True
 
 tikzplotlib.save("../tikz/figure3.tex")
 #tikzplotlib.save("../tikz/figure3.tex", flavor="context")
+
+plt.show()
