@@ -1,3 +1,4 @@
+import scipy
 import numpy as np
 
 import matplotlib
@@ -16,10 +17,29 @@ plot_rc_config()
 ########################################
 data = np.load('../data/figure5b.npz')
 
-num_successful_attempts = data['num_successful_attempts']
-channel_loads = data['channel_loads']
 range_rec_error = data['range_rec_error']
+channel_loads = data['channel_loads']
 access_policies = data['access_policies']
+
+proba_access = data['proba_access']
+
+# Compute average
+avg_proba_access = np.nanmean(proba_access, axis=-1)
+
+# Smoothed channel load
+sm_channel_loads = np.linspace(channel_loads.min(), channel_loads.max(), 501)
+
+# Smooth data
+sm_avg_proba_access = np.zeros((avg_proba_access.shape[0], avg_proba_access.shape[1], 501))
+
+# Go through all access policies
+for ap, access_policy in enumerate(access_policies):
+
+    # Go through all reconstruction errors
+    for re, rec_error in enumerate(range_rec_error):
+
+            model = scipy.interpolate.interp1d(channel_loads, avg_proba_access[ap, re, :], kind = "cubic")
+            sm_avg_proba_access[ap, re] = model(sm_channel_loads)
 
 ##################################################
 # Plot
@@ -29,70 +49,87 @@ access_policies = data['access_policies']
 error_labels = [
     'true',
     '$\overline{\mathrm{SE}}=10^{-1}$',
+    #'$\overline{\mathrm{SE}}=10^{-2}$',
     '$\overline{\mathrm{SE}}=10^{-3}$'
     ]
 
 # Define error markers
-error_markers = [None, 'o', 's', 'd']
+markers = ['o', 's', None, '^']
+linestyles = ['--', '-.', ':']
 
-# fig, ax = plt.subplots()
-#
-# ax.plot(channel_loads, np.nanmean(num_successful_attempts[0, 0, :, :], axis=-1), linewidth=1.5, linestyle='-', label='RCURAP', color='black')
-#
-# # Go through all recontruction errors
-# for re in range(range_rec_error.size):
-#     ax.plot(channel_loads, np.nanmean(num_successful_attempts[-1, re, :, :], axis=-1), marker=error_markers[re], linewidth=1.5, linestyle='--', label='SMAP: ' + error_labels[re])
-#
-# ax.set_xlabel(r'channel load, $\kappa$')
-# ax.set_ylabel(r'successful attempts ratio')
-#
-# #ax.set_yscale('log')
-#
-# ax.grid(color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
-#
-# ax.legend(fontsize='medium', loc='best')
-#
-# plt.tight_layout()
-#
-# plt.savefig('../figs/figure5b.pdf', dpi='figure', format='pdf', transparent='True')
-#
-# tikzplotlib.save("../tikz/figure5b.tex")
-#
-# plt.show()
+#colors = ['#7f58af', '#64c5eb', '#e84d8a', '#feb326']
+#colors = ['#674a40', '#50a3a4', '#fcaf38', '#f95335']
 
-# fig, ax = plt.subplots()
-#
-# data = num_successful_attempts[-1].reshape((14, -1))
-#
-# for re in range(range_rec_error.size):
-#
-#     filtered_data = data[re, ~np.isnan(data[re])]
-#     ax.boxplot(filtered_data, positions=[re])
-#
-# plt.show()
+fig, ax = plt.subplots(figsize=(6.5/2, 3))
 
-fig, ax = plt.subplots()
+# Go through all access policies
+for ap, access_policy in enumerate(access_policies):
 
-# Go through all channel loads
-for cl in [1, 2, 3]:
-    #ax.plot(range_rec_error, np.ones_like(range_rec_error)*np.nanmean(num_successful_attempts[0, 0, cl, :], axis=-1), linewidth=1.5, linestyle='-', label='RCURAP', color='black')
-    ax.plot(range_rec_error, np.nanmean(num_successful_attempts[cl, :, :, :], axis=(-1, -2)), linewidth=1.5, linestyle='--') #label='SMAP: ' + error_labels[re])
+    plt.gca().set_prop_cycle(None)
 
-#marker=error_markers[re]
-ax.set_xlabel(r'channel load, $\kappa$')
-ax.set_ylabel(r'successful attempts ratio')
+    # Go through all reconstruction errors
+    for re, rec_error in enumerate(range_rec_error):
 
-ax.set_xscale('log')
-ax.set_yscale('log')
+        if re == 0:
+            ax.plot(sm_channel_loads, sm_avg_proba_access[ap, re, :], linewidth=1.5, linestyle=linestyles[ap], marker=markers[re], markevery=125, markersize=5, markerfacecolor='white', color='black')
+            continue
+
+        if re == 2:
+            continue
+
+        ax.plot(sm_channel_loads, sm_avg_proba_access[ap, re, :], linewidth=1.5, linestyle=linestyles[ap], marker=markers[re], markevery=125, markersize=5, markerfacecolor='white')
+
+# Legend plots
+ap1, = ax.plot(sm_channel_loads, sm_avg_proba_access[0, 0, :], linewidth=1.5, linestyle=linestyles[0], color='grey', label=access_policies[0])
+ap2, = ax.plot(sm_channel_loads, sm_avg_proba_access[1, 0, :], linewidth=1.5, linestyle=linestyles[1], color='grey', label=access_policies[1])
+ap3, = ax.plot(sm_channel_loads, sm_avg_proba_access[2, 0, :], linewidth=1.5, linestyle=linestyles[2], color='grey', label=access_policies[2])
+
+r1, = ax.plot(sm_channel_loads, sm_avg_proba_access[0, 0, :], linewidth=0.0, linestyle=None, marker=markers[0], markevery=125, markersize=5, markerfacecolor='white', color='black', label='true')
+plt.gca().set_prop_cycle(None)
+r2, = ax.plot(sm_channel_loads, sm_avg_proba_access[0, 0, :], linewidth=0.0, linestyle=None, marker=markers[1], markevery=125, markersize=5, markerfacecolor='white', label=r'$\overline{\mathrm{SE}}=10^{-1}$')
+r3, = ax.plot(sm_channel_loads, sm_avg_proba_access[0, 0, :], linewidth=0.0, linestyle=None, marker=markers[3], markevery=125, markersize=5, markerfacecolor='white', label=r'$\overline{\mathrm{SE}}=10^{-3}$')
+
+ax.set_xlabel('channel load, $\kappa$')
+ax.set_ylabel('probability of access')
+
+# ax.set_xscale('log')
+# ax.set_yscale('log')
 
 ax.grid(color='gray', linestyle=':', linewidth=0.5, alpha=0.5)
 
-ax.legend(fontsize='medium', loc='best')
+ax.tick_params(axis='both', which='major', labelsize=8)
+ax.tick_params(axis='both', which='minor', labelsize=8)
 
-plt.tight_layout()
+plt.subplots_adjust(
+	left = 0.15,  	# the left side of the subplots of the figure
+	right = 0.99,   # the right side of the subplots of the figure
+	bottom = 0.26,   # the bottom of the subplots of the figure
+	top = 0.99,     # the top of the subplots of the figure
+	wspace = 0.5,  	# the amount of width reserved for space between subplots,
+    	           	# expressed as a fraction of the average axis width
+	hspace = 0.05   # the amount of height reserved for space between subplots,
+              	 	# expressed as a fraction of the average axis height
+              )
+
+# box = ax.get_position()
+# ax.set_position([box.x0, box.y0 + (box.height * 0.125),
+#                  box.width, box.height * 0.9])
+
+ax.legend(fontsize='small', ncol=3, framealpha=0.5,
+        bbox_to_anchor=[0.95, -0.15], fancybox=True)
+
+ax.lines.remove(ap1)
+ax.lines.remove(ap2)
+ax.lines.remove(ap3)
+
+ax.lines.remove(r1)
+ax.lines.remove(r2)
+ax.lines.remove(r3)
+
+#plt.tight_layout()
 
 plt.savefig('../figs/figure5b.pdf', dpi='figure', format='pdf', transparent='True')
 
 tikzplotlib.save("../tikz/figure5b.tex")
 
-#plt.show()
+plt.show()

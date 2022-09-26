@@ -8,10 +8,13 @@ from tqdm import trange
 from src.box import Box
 from src.frame import Frame
 
+import matplotlib
+import matplotlib.pyplot as plt
+
 ########################################
 # Preamble
 ########################################
-seed = 0
+seed = 42
 np.random.seed(seed)
 
 ########################################
@@ -80,18 +83,26 @@ rec_error = 10**(-3)
 ########################################
 
 # Number of setups
-num_setups = int(1e4)
+num_setups = int(1e5)
 
 # Range of channel load
-channel_loads = np.arange(1, 150)
+channel_loads = np.arange(1, 151)
+
+# Range of switch time
+switch_times = np.array([0, 1, 5])
 
 # Define the access policies
 access_policies = ['RCURAP', 'RCARAP', 'RGSCAP', 'SMAP']
 
-# Prepare to store simulation results
-proba_access = np.zeros((len(access_policies), channel_loads.size, num_setups))
-throughput = np.zeros((len(access_policies), channel_loads.size, num_setups))
+# Define number of repetitions
+num_repetitions = 1
 
+# Define ACK methods
+ack_methods = ['prec', 'tdma']
+
+# Prepare to store number of successful attempts
+proba_access = np.zeros((len(ack_methods) + 1, len(access_policies), channel_loads.size, num_setups))
+throughput = np.zeros((len(switch_times), len(ack_methods) + 1, len(access_policies), channel_loads.size, num_setups))
 
 #####
 
@@ -108,13 +119,17 @@ box.place_ris(num_els_ver=num_els_ver, num_els_hor=num_els_hor, size_el=size_el)
 # Initialize a random access frame
 frame = Frame()
 
+# Go through all switch times
+
+
 # Initialize training block
 frame.init_training(46, num_channel_uses_dl, 0, decoding_snr)
 
-# Go through all channel loads
-for cc in trange(channel_loads.size, desc="Channel Load", unit=" chnload"):
 
-    # Extract current channel load
+# Go through all channel loads
+for cc in trange(channel_loads.size, desc="Channel Load", unit=" chnload", colour="green"):
+
+# Extract current channel load
     channel_load = channel_loads[cc]
 
     # Generating new UEs
@@ -133,8 +148,8 @@ for cc in trange(channel_loads.size, desc="Channel Load", unit=" chnload"):
         num_ues = range_num_ues[ss]
 
         if num_ues == 0:
-            proba_access[:, cc, ss] = np.nan
-            throughput[:, cc, ss] = np.nan
+            proba_access[:, :, cc, ss] = np.nan
+            throughput[:, :, :, cc, ss] = np.nan
             continue
 
         # Place UEs
@@ -181,18 +196,58 @@ for cc in trange(channel_loads.size, desc="Channel Load", unit=" chnload"):
             if ac_num_successful_ues == 0:
                 continue
 
-            # Compute throughput
-            current_throughput = frame.compute_throughput(access_policy, ac_num_successful_ues)
-
             # Store simulation results
-            proba_access[ap, cc, ss] = ac_num_successful_ues / num_ues
-            throughput[ap, cc, ss] = current_throughput
+            proba_access[0, ap, cc, ss] = ac_num_successful_ues / num_ues
+
+
+            ## DL ackowledgment block
+
+
+            # Initialize ACK block
+            frame.init_ack(ac_num_successful_ues, num_channel_uses_dl, 0, decoding_snr)
+
+            # Get successful UEs
+            ac_successful_ues = np.array(list(access_result.keys()))
+
+            # Get detected direction
+            mask = np.squeeze(list(access_result.values()))
+            detected_directions = frame.ac.codebook[mask]
+
+            if type(detected_directions) is np.float_:
+                detected_directions = np.array([detected_directions,])
+
+            temp = []
+
+            # Go through all ACK methods
+            for aa, ack_method in enumerate(ack_methods):
+
+                # Set codebook
+                frame.ack.set_codebook(detected_directions, ack_method=ack_method)
+
+                # Generate DL channels
+                dl_channels = box.get_channels(ap_tx_power, noise_power, frame.ack.codebook, direction='dl', mask=ac_successful_ues)
+
+                # Get number of ACK success
+                ack_num_successful_ues = frame.ack.dl_transmission(dl_channels)
+
+                # Store simulation results
+                proba_access[aa + 1, ap, cc, ss] = ack_num_successful_ues / num_ues
+                temp.append(ack_num_successful_ues)
+
+            for st, switch_time in enumerate(switch_times):
+                throughput[st, 0, ap, cc, ss] = frame.compute_throughput(access_policy, ac_num_successful_ues, switch_time=switch_time)
+                throughput[st, 1, ap, cc, ss] = frame.compute_throughput(access_policy, temp[0], ack_method='prec', switch_time=switch_time)
+                throughput[st, 2, ap, cc, ss] = frame.compute_throughput(access_policy, temp[1], ack_method='tdma', switch_time=switch_time)
+
+            del temp
 
 # Save data
 np.savez(
-    'data/figure6.npz',
+    'data/figure8.npz',
     channel_loads=channel_loads,
     access_policies=access_policies,
+    ack_methods=ack_methods,
+    switch_times=switch_times,
     proba_access=proba_access,
-    throughput=throughput,
+    throughput=throughput
 )

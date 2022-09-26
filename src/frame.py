@@ -147,6 +147,7 @@ class Access(Block):
 
                 # Get probability mass function
                 pmf = np.exp(np.abs(ac_info[ue, :])) / np.exp(np.abs(ac_info[ue, :])).sum()
+                pmf = (np.abs(ac_info[ue, :])) / (np.abs(ac_info[ue, :])).sum()
 
                 # Sample w/o replacement according to pmf
                 ue_choices[ue] = list(rng.choice(self.enum_ac_slots, size=num_packets, replace=False, p=pmf))
@@ -336,12 +337,43 @@ class ACK(Block):
 
         self.codebook = None
 
-    def set_codebook(self, detected_directions):
+    def set_codebook(self, detected_directions, weights=None, ack_method=None):
 
-        if self.num_slots == 1:
+        if ack_method == 'prec':
 
-            self.codebook = np.linspace(0, np.pi/2, self.num_slots)
+            if weights is None:
 
+                self.codebook = np.repeat(detected_directions.mean(), detected_directions.size)
+
+        elif ack_method == 'tdma':
+
+            self.codebook = detected_directions
+
+        _, multiplier = np.unique(self.codebook, return_counts=True)
+        multiplier = (multiplier >= 1).sum()
+        self.multiplier = int(multiplier)
+
+    def dl_transmission(self, dl_channels):
+
+        # Number of UEs
+        num_ues = dl_channels.shape[0]
+
+        # Generate ACK message
+        ack_messages = np.sqrt(1/2) * (np.random.randn(num_ues, self.num_channel_uses) + 1j * np.random.randn(num_ues, self.num_channel_uses))
+
+        # Generate noise
+        noise = np.sqrt(1/2) * (np.random.randn(num_ues, self.num_channel_uses) + 1j * np.random.randn(num_ues, self.num_channel_uses))
+
+        # Compute received signal
+        rx_signals = dl_channels * ack_messages + noise
+
+        # Compute received SNR
+        rx_snr = np.linalg.norm(rx_signals, axis=-1)**2
+
+        # Compare with the threshold
+        ack_success = rx_snr >= (self.num_channel_uses * self.decoding_snr)
+
+        return ack_success.sum()
 
 class Frame():
 
@@ -386,19 +418,32 @@ class Frame():
         self.ack = ACK(num_slots, num_channel_uses, num_silent_channel_uses, decoding_snr)
 
 
-    def compute_throughput(self, access_policy, num_successful_attempts):
+    def compute_throughput(self, access_policy, num_successful_attempts, ack_method=None, switch_time=0):
         """
 
         """
 
         # Compute durations
-        tr_duration = (self.tr.num_slots * self.tr.num_channel_uses) + (self.tr.num_slots * self.tr.num_silent_channel_uses)
-        ac_duration = (self.ac.num_slots * self.ac.num_channel_uses) + (self.ac.num_slots * self.ac.num_silent_channel_uses)
+        tr_duration = (self.tr.num_slots * self.tr.num_channel_uses) + (self.tr.num_slots * switch_time)
+        ac_duration = (self.ac.num_slots * self.ac.num_channel_uses) + (self.ac.num_slots * switch_time)
 
         # Compute throughput
-        if access_policy == 'RCURAP':
-            throughput = num_successful_attempts / ac_duration
+        if ack_method is None:
+
+            if access_policy == 'RCURAP':
+                throughput = num_successful_attempts / ac_duration
+            else:
+                throughput = num_successful_attempts / (tr_duration + ac_duration)
+
         else:
-            throughput = num_successful_attempts / (tr_duration + ac_duration)
+            if ack_method == 'prec':
+                ack_duration = (self.ack.num_slots * self.ack.num_channel_uses) + switch_time
+            elif ack_method == 'tdma':
+                ack_duration = (self.ack.num_slots * self.ack.num_channel_uses) + (self.ack.multiplier * switch_time)
+
+            if access_policy == 'RCURAP':
+                throughput = num_successful_attempts / (ac_duration + ack_duration)
+            else:
+                throughput = num_successful_attempts / (tr_duration + ac_duration + ack_duration)
 
         return throughput

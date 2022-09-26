@@ -76,7 +76,7 @@ dl_channel_gains = np.abs(dl_channels_flattened)**2
 dl_channel_gains_sorted = np.sort(dl_channel_gains)
 
 # Compute in dB
-dl_channel_gains_sorted_db = 20 + 94 + 10 * np.log10(dl_channel_gains_sorted)
+dl_channel_gains_sorted_db = 10 + 94 + 10 * np.log10(dl_channel_gains_sorted)
 
 # Get CDF
 dl_channel_gains_cdf = np.linspace(0, 1, dl_channel_gains_sorted.size)

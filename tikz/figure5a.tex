@@ -239,7 +239,7 @@ table {%
 200 8.45884429850677e-13
 };
 \addlegendentry{true}
-\addplot [semithick, steelblue31119180, dashed, mark=*, mark size=2, mark repeat=10, mark options={solid}]
+\addplot [semithick, steelblue31119180, dashed]
 table {%
 10 0.396756228911654
 11 0.307772383056336
@@ -434,7 +434,7 @@ table {%
 200 0.0223931300313383
 };
 \addlegendentry{$\delta_{\mathrm{tol}}^{\scriptscriptstyle \mathrm{DL}}=10^{-1}$}
-\addplot [semithick, darkorange25512714, dashed, mark=square*, mark size=2, mark repeat=10, mark options={solid}]
+\addplot [semithick, darkorange25512714, dash pattern=on 1pt off 3pt on 3pt off 3pt]
 table {%
 10 0.375341796677552
 11 0.28649679546855
@@ -629,7 +629,7 @@ table {%
 200 0.00223625554248856
 };
 \addlegendentry{$\delta_{\mathrm{tol}}^{\scriptscriptstyle \mathrm{DL}}=10^{-2}$}
-\addplot [semithick, forestgreen4416044, dashed, mark=diamond*, mark size=2, mark repeat=10, mark options={solid}]
+\addplot [semithick, forestgreen4416044, dotted]
 table {%
 10 0.373222746212775
 11 0.284406680550391
@@ -844,30 +844,30 @@ table {%
 150 0.0001
 150 1
 };
-\draw (axis cs:20,0.1) node[
+\draw (axis cs:20,0.3) node[
   scale=0.4165,
   anchor=base west,
   text=black,
   rotate=90.0
-]{$\acute{N}^{10^{-2}}_{\rm tr}=16$};
-\draw (axis cs:50,0.1) node[
+]{$\acute{N}^{10^{-2}}_{\rm tr}$};
+\draw (axis cs:50,0.3) node[
   scale=0.4165,
   anchor=base west,
   text=black,
   rotate=90.0
-]{$\acute{N}^{10^{-3}}_{\rm tr}=46$};
-\draw (axis cs:85,0.005) node[
-  scale=0.4165,
-  anchor=base west,
-  text=black,
-  rotate=0.0
-]{$\check{N}^{10^{-2}}_{\rm tr}=142$};
-\draw (axis cs:154,0.0003) node[
+]{$\acute{N}^{10^{-3}}_{\rm tr}$};
+\draw (axis cs:124,0.005) node[
   scale=0.4165,
   anchor=base west,
   text=black,
   rotate=90.0
-]{$\tilde{N}_{\rm tr}=150$};
+]{$\check{N}^{10^{-2}}_{\rm tr}$};
+\draw (axis cs:154,0.0005) node[
+  scale=0.4165,
+  anchor=base west,
+  text=black,
+  rotate=90.0
+]{$\tilde{N}_{\rm tr}$};
 \end{axis}
 
 \end{tikzpicture}

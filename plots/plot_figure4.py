@@ -36,7 +36,7 @@ labels = [
     ]
 
 
-fig, ax = plt.subplots(figsize=(6.5, 3))
+fig, ax = plt.subplots(figsize=(6.1, 2.5))
 
 ax.plot(np.rad2deg(ue_angles), appr_max_freq_1 * np.ones_like(ue_angles), linestyle='-', color='black', linewidth=1.5, label=r'$\tilde{F}_{\max}$ in (16)')
 
@@ -52,6 +52,9 @@ ax.set_xlabel(r"UE's angle, $\theta_k$")
 ax.set_xticks(np.arange(0, 100, 10))
 ax.xaxis.set_major_formatter(StrMethodFormatter(u"{x:.0f}°"))
 
+ax.tick_params(axis='both', which='major', labelsize=8)
+ax.tick_params(axis='both', which='minor', labelsize=8)
+
 # plt.xticks(fontsize=12)
 # plt.yticks(fontsize=12)
 
@@ -63,18 +66,18 @@ ax.grid(color='#E9E9E9', linestyle=':', linewidth=1.0, alpha=0.5)
 
 plt.tight_layout()
 
-# plt.subplots_adjust(
-#     left = 0.125,
-#     right = 0.99,
-#     bottom = 0.175,
-#     top = 0.95,
-#     wspace = 0.5,
-#     hspace = 0.05
-#     )
+plt.subplots_adjust(
+    left = 0.075,
+    right = 0.99,
+    bottom = 0.175,
+    top = 0.95,
+    wspace = 0.5,
+    hspace = 0.05
+    )
 
 plt.savefig('../figs/figure4.pdf', dpi='figure', format='pdf', transparent='True')
 
-tikzplotlib.save("figure4.tex")
+tikzplotlib.save("../tikz/figure4.tex")
 #tikzplotlib.save("figure4.tex", flavor="context")
 
 plt.show()

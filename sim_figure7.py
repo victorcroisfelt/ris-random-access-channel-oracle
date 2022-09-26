@@ -8,10 +8,13 @@ from tqdm import trange
 from src.box import Box
 from src.frame import Frame
 
+import matplotlib
+import matplotlib.pyplot as plt
+
 ########################################
 # Preamble
 ########################################
-seed = 0
+seed = 42
 np.random.seed(seed)
 
 ########################################
@@ -83,14 +86,20 @@ rec_error = 10**(-3)
 num_setups = int(1e4)
 
 # Range of channel load
-channel_loads = np.arange(1, 150)
+channel_loads = np.arange(1, 151)
 
 # Define the access policies
 access_policies = ['RCURAP', 'RCARAP', 'RGSCAP', 'SMAP']
 
+# Define number of repetitions
+num_repetitions = 1
+
+# Define ACK methods
+ack_methods = ['prec', 'tdma']
+
 # Prepare to store simulation results
-proba_access = np.zeros((len(access_policies), channel_loads.size, num_setups))
-throughput = np.zeros((len(access_policies), channel_loads.size, num_setups))
+proba_access = np.zeros((len(ack_methods) + 1, len(access_policies), channel_loads.size, num_setups))
+throughput = np.zeros((len(ack_methods) + 1, len(access_policies), channel_loads.size, num_setups))
 
 
 #####
@@ -133,8 +142,8 @@ for cc in trange(channel_loads.size, desc="Channel Load", unit=" chnload"):
         num_ues = range_num_ues[ss]
 
         if num_ues == 0:
-            proba_access[:, cc, ss] = np.nan
-            throughput[:, cc, ss] = np.nan
+            proba_access[:, :, cc, ss] = np.nan
+            throughput[:, :, cc, ss] = np.nan
             continue
 
         # Place UEs
@@ -154,7 +163,7 @@ for cc in trange(channel_loads.size, desc="Channel Load", unit=" chnload"):
         ac_true_info = box.get_channels(ue_tx_power, noise_power, frame.ac.codebook, direction='ul')
 
         # Noisy access info
-        ac_info = ac_true_info + np.sqrt(rec_error) * rec_noise if not np.isnan(rec_error) else ac_true_info
+        ac_info = ac_true_info + (np.sqrt(rec_error) * rec_noise) if not np.isnan(rec_error) else ac_true_info
 
 
         ## UL access block
@@ -181,18 +190,48 @@ for cc in trange(channel_loads.size, desc="Channel Load", unit=" chnload"):
             if ac_num_successful_ues == 0:
                 continue
 
-            # Compute throughput
-            current_throughput = frame.compute_throughput(access_policy, ac_num_successful_ues)
-
             # Store simulation results
-            proba_access[ap, cc, ss] = ac_num_successful_ues / num_ues
-            throughput[ap, cc, ss] = current_throughput
+            proba_access[0, ap, cc, ss] = ac_num_successful_ues / num_ues
+            throughput[0, ap, cc, ss] = frame.compute_throughput(access_policy, ac_num_successful_ues)
 
+
+            ## DL ackowledgment block
+
+
+            # Initialize ACK block
+            frame.init_ack(ac_num_successful_ues, num_channel_uses_dl, 0, decoding_snr)
+
+            # Get successful UEs
+            ac_successful_ues = np.array(list(access_result.keys()))
+
+            # Get detected direction
+            mask = np.squeeze(list(access_result.values()))
+            detected_directions = frame.ac.codebook[mask]
+
+            if type(detected_directions) is np.float_:
+                detected_directions = np.array([detected_directions,])
+
+            # Go through all ACK methods
+            for aa, ack_method in enumerate(ack_methods):
+
+                # Set codebook
+                frame.ack.set_codebook(detected_directions, ack_method=ack_method)
+
+                # Generate DL channels
+                dl_channels = box.get_channels(ap_tx_power, noise_power, frame.ack.codebook, direction='dl', mask=ac_successful_ues)
+
+                # Get number of ACK success
+                ack_num_successful_ues = frame.ack.dl_transmission(dl_channels)
+
+                # Store simulation results
+                proba_access[aa + 1, ap, cc, ss] = ack_num_successful_ues / num_ues
+                throughput[aa + 1, ap, cc, ss] = frame.compute_throughput(access_policy, ack_num_successful_ues, ack_method='prec')
 # Save data
 np.savez(
-    'data/figure6.npz',
+    'data/figure7.npz',
     channel_loads=channel_loads,
     access_policies=access_policies,
+    ack_methods=ack_methods,
     proba_access=proba_access,
-    throughput=throughput,
+    throughput=throughput
 )

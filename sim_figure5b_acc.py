@@ -8,8 +8,6 @@ from tqdm import trange
 from src.box import Box
 from src.frame import Frame
 
-import matplotlib.pyplot as plt
-
 ########################################
 # Preamble
 ########################################
@@ -76,19 +74,23 @@ num_channel_uses_ul = 1
 ########################################
 
 # Number of setups
-num_setups = int(1e5)
+num_setups = int(1e2)
 
-# Range of channel load
-channel_loads = np.arange(10, 51)
+# Number of noise samples
+num_noisy_samples = int(1e3)
 
 # Range of reconstruction MSE error
-range_rec_error = np.array([0, 10**(-1), 10**(-2), 10**(-3)])
+#range_rec_error = np.array([0, 10**(-6), 5*10**(-6), 10**(-5), 5*10**(-5), 10**(-4), 5*10**(-4), 10**(-3), 5*10**(-3), 10**(-2), 5*10**(-2), 10**(-1), 5*10**(-1), 1])
+range_rec_error = np.flip(np.array([10**(-3), 10**(-2), 10**(-1)]))
+
+# Range of number of access slots
+range_ac_num_slots = np.arange(ac_min_num_slots, 201)
 
 # Define the access policies
 access_policies = ['RCARAP', 'RGSCAP', 'SMAP']
 
 # Prepare to save accuracy
-proba_access = np.zeros((len(access_policies), range_rec_error.size, channel_loads.size, num_setups))
+accuracy = np.zeros((len(access_policies), range_rec_error.size, range_ac_num_slots.size, num_setups, num_noisy_samples))
 
 
 #####
@@ -109,89 +111,52 @@ frame = Frame()
 # Place UEs
 box.place_ue(num_setups)
 
-# Go through all channel loads
-for cc in trange(channel_loads.size, desc="Channel Load", unit=" chnload"):
+# Go through all number of access slots
+for asl in trange(range_ac_num_slots.size, desc="access size", unit=" as"):
 
-    # Extract current channel load
-    channel_load = channel_loads[cc]
-
-    # Generating new UEs
-    range_num_ues = np.random.poisson(channel_load, (num_setups))
-
-    # Define current number of access slots
-    ac_num_slots = channel_load if channel_load >= ac_min_num_slots else ac_min_num_slots
+    # Extract current number of access slots
+    ac_num_slots = range_ac_num_slots[asl]
 
     # Initialize access block
     frame.init_access(ac_num_slots, num_channel_uses_ul, 0, decoding_snr)
 
-    # Go through all setups
-    for ss in range(num_setups):
+    # True access info
+    ac_true_info = box.get_channels(ue_tx_power, noise_power, frame.ac.codebook, direction='ul')
 
-        # Extract current number of UEs
-        num_ues = range_num_ues[ss]
+    # Generate reconstruction noise
+    rec_noise = np.sqrt(1/2) * (np.random.randn(num_setups, frame.ac.num_slots, num_noisy_samples) + 1j * np.random.randn(num_setups, frame.ac.num_slots, num_noisy_samples))
 
-        if num_ues == 0:
-            proba_access[:, :, cc, ss] = np.nan
-            continue
+    # Go through all access policies
+    for ap in range(len(access_policies)):
 
-        # Place UEs
-        box.place_ue(num_ues)
+        # Obtain true access policy
+        true_chosen_ac_slots = frame.ac.access_policy(ac_true_info, access_policy=access_policies[ap], rng=np.random.RandomState(asl))
 
-        # Generate UEs messages
-        ue_messages = frame.ac.messages(num_ues)
+        # Go through all reconstruction errors
+        for re in range(range_rec_error.size):
 
+            # Extract current recontruction error
+            rec_error = range_rec_error[re]
 
-        ## DL training block
+            # Information obtained by the UEs
+            ac_info = ac_true_info[:, :, None] + np.sqrt(rec_error) * rec_noise
 
+            # Go through all noisy samples
+            for nn in range(num_noisy_samples):
 
-        # Generate reconstruction noise
-        rec_noise = np.sqrt(1/2) * (np.random.randn(num_ues, ac_num_slots) + 1j * np.random.randn(num_ues, ac_num_slots))
+                # Obtain noisy access policy
+                noisy_chosen_ac_slots = frame.ac.access_policy(ac_info[:, :, nn], access_policy=access_policies[ap], rng=np.random.RandomState(asl))
 
-        # True access info
-        ac_true_info = box.get_channels(ue_tx_power, noise_power, frame.ac.codebook, direction='ul')
-
-
-        ## UL access block
-
-
-        # Go through all access policies
-        for ap in range(len(access_policies)):
-
-            # Extract current access policy
-            access_policy = access_policies[ap]
-
-            # Go through all reconstruction errors
-            for re in range(range_rec_error.size):
-
-                # Extract current recontruction error
-                rec_error = range_rec_error[re]
-
-                # Information obtained by the UEs
-                ac_info = ac_true_info + np.sqrt(rec_error) * rec_noise
-
-                # Apply access policy
-                ue_choices = frame.ac.access_policy(ac_info, access_policy=access_policy)
-
-                # Get UL transmitted messages and received signals
-                access_attempts, bigraph = frame.ac.ul_transmission(ac_true_info, ue_messages, ue_choices)
-
-                # AP decoder
-                access_result = frame.ac.decoder(ac_true_info, ue_messages, access_attempts, bigraph, mvu_error_ul)
-
-                # Access number of successful UEs
-                ac_num_successful_ues = len(access_result)
-
-                if ac_num_successful_ues == 0:
-                    continue
-
-                # Store simulation results
-                proba_access[ap, re, cc, ss] = ac_num_successful_ues / num_ues
+                # Go through each UE
+                for ue in range(num_setups):
+                    intersection = (set(true_chosen_ac_slots[ue])).intersection(set(noisy_chosen_ac_slots[ue]))
+                    accuracy[ap, re, asl, ue, nn] = len(set(intersection)) / len(true_chosen_ac_slots[ue])
 
 # Save data
 np.savez(
     'data/figure5b.npz',
     range_rec_error=range_rec_error,
-    channel_loads=channel_loads,
+    range_ac_num_slots=range_ac_num_slots,
     access_policies=access_policies,
-    proba_access=proba_access
+    accuracy=accuracy
 )
