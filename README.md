@@ -20,6 +20,7 @@ The code provided here can be used to simulate Figs. 2 to 7 of the paper. The co
   - /data: here you can find the .npz files outputed by each simulation script. We should run by yourself, since the files are too large to share using GitHub.
   - /figs: where the .pdfs of the figures are saved.
   - /plots: here you can find a script named as plot_figureX.py for each figure; these scripts load the .npz files saved in /data and output the figures as both pdf and tikz.
+  - /src: define classes and functions needed to run the simulations.
   - /tikz: where the .texs of the figures are saved.
 
 ## Citing this Repository and License
