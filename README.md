@@ -25,3 +25,6 @@ The code provided here can be used to simulate Figs. 2 to 7 of the paper. The co
 
 ## Citing this Repository and License
 This code is subject to the MIT license. If you use any part of this repository for research, please consider to cite our aforementioned work.
+
+## Acknowledgement
+This work was supported by the Villum Investigator Grant “WATER” from the Velux Foundation, Denmark.
