@@ -21,7 +21,7 @@ The code provided here can be used to simulate Figs. 2 to 7 of the paper. The co
   - /figs: where the .pdfs of the figures are saved.
   - /plots: here you can find a script named as plot_figureX.py for each figure; these scripts load the .npz files saved in /data and output the figures as both pdf and tikz.
   - /src: define classes and functions needed to run the simulations.
-  - /tikz: where the .texs of the figures are saved.
+  - /tikz: where the .tex's of the figures are saved.
 
 ## Citing this Repository and License
 This code is subject to the MIT license. If you use any part of this repository for research, please consider to cite our aforementioned work.
