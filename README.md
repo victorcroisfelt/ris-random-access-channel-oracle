@@ -17,7 +17,7 @@ The widespread adoption of Reconfigurable Intelligent Surfaces (RISs) in future 
 ## Content
 The code provided here can be used to simulate Figs. 2 to 7 of the paper. The code is organized in the following way:
   - sim_figureX.py: simulation scripts that stores the data points need to plot each figure as a .npz file.
-  - /data: here you can find the .npz files outputed by each simulation script. We should run by yourself, since the files are too large to share using GitHub.
+  - /data: here you can find the .npz files outputed by each simulation script. NOTE: you should run the simulations scripts by yourself, since the files are too large to share using GitHub.
   - /figs: where the .pdfs of the figures are saved.
   - /plots: here you can find a script named as plot_figureX.py for each figure; these scripts load the .npz files saved in /data and output the figures as both pdf and tikz.
   - /src: define classes and functions needed to run the simulations.
@@ -27,4 +27,4 @@ The code provided here can be used to simulate Figs. 2 to 7 of the paper. The co
 This code is subject to the MIT license. If you use any part of this repository for research, please consider to cite our aforementioned work.
 
 ## Acknowledgement
-This work was supported by the Villum Investigator Grant “WATER” from the Velux Foundation, Denmark.
+This work was supported by the Villum Investigator Grant “WATER” from the Villum Fonden, Denmark.
