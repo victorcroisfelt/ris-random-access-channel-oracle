@@ -16,15 +16,30 @@ The widespread adoption of Reconfigurable Intelligent Surfaces (RISs) in future 
 
 ## Content
 The code provided here can be used to simulate Figs. 2 to 7 of the paper. The code is organized in the following way:
-  - sim_figureX.py: simulation scripts that stores the data points need to plot each figure as a .npz file.
-  - /data: here you can find the .npz files outputed by each simulation script. NOTE: you should run the simulations scripts by yourself, since the files are too large to share using GitHub.
+  - sim_figureX.py: simulation scripts that store the data points need to plot each figure as a .npz file.
+  - /data: here you can find the .npz files output by each simulation script. NOTE: you should run the simulation scripts by yourself since the files are too large to share using GitHub.
   - /figs: where the .pdfs of the figures are saved.
-  - /plots: here you can find a script named as plot_figureX.py for each figure; these scripts load the .npz files saved in /data and output the figures as both pdf and tikz.
+  - /plots: here you can find a script named plot_figureX.py for each figure; these scripts load the .npz files saved in /data and output the figures as both pdf and tikz.
   - /src: define classes and functions needed to run the simulations.
   - /tikz: where the .tex's of the figures are saved.
 
 ## Citing this Repository and License
-This code is subject to the MIT license. If you use any part of this repository for research, please consider to cite our aforementioned work.
+This code is subject to the MIT license. If you use any part of this repository for research, please consider citing our aforementioned work.
 
 ## Acknowledgement
 This work was supported by the Villum Investigator Grant “WATER” from the Villum Fonden, Denmark.
+
+```bibtex
+@INPROCEEDINGS{9833984,
+  author={Croisfelt, Victor and Saggese, Fabio and Leyva-Mayorga, Israel, and Kotaba, Radosław and Gradoni, Gabriele and Popovski, Petar},
+  booktitle={2022 IEEE 23rd International Workshop on Signal Processing Advances in Wireless Communication (SPAWC)}, 
+  title={A Random Access Protocol for RIS-Aided Wireless Communications}, 
+  year={2022},
+  volume={},
+  number={},
+  pages={1-5},
+  keywords={Training;Wireless communication;Access protocols;Reconfigurable intelligent surfaces;Signal processing;Throughput;Reflection;Reconfigurable intelligent surface (RIS);random access},
+  doi={10.1109/SPAWC51304.2022.9833984}
+}
+
+
