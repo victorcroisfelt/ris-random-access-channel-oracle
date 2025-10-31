@@ -1,9 +1,9 @@
 # Random Access Protocol with Channel Oracle Enabled by a Reconfigurable Intelligent Surface
 This is a research-oriented code package that is primarily intended to allow readers to replicate the results of the article mentioned below and also encourage and accelerate further research on this topic:
 
-Croisfelt, V., Saggese, F., Leyva-Mayorga, I., Kotaba, R., Gradoni, G., and Popovski, P., “Random Access Protocol with Channel Oracle Enabled by a Reconfigurable Intelligent Surface”, arXiv e-prints, 2022. doi:10.48550/arXiv.2210.04230.
+V. Croisfelt, F. Saggese, I. Leyva-Mayorga, R. Kotaba, G. Gradoni and P. Popovski, "Random Access Protocol With Channel Oracle Enabled by a Reconfigurable Intelligent Surface," in IEEE Transactions on Wireless Communications, vol. 22, no. 12, pp. 9157-9171, Dec. 2023, doi: 10.1109/TWC.2023.3268765.
 
-A pre-print version is available on: https://arxiv.org/abs/2210.04230, which has a different content from the published one.
+A pre-print version is available on arXiv: https://arxiv.org/abs/2210.04230, which has different content from the published one.
 
 A conference version of this paper is also available on: https://ieeexplore.ieee.org/abstract/document/9833984.
 
@@ -26,9 +26,6 @@ The code provided here can be used to simulate Figs. 2 to 7 of the paper. The co
 ## Citing this Repository and License
 This code is subject to the MIT license. If you use any part of this repository for research, please consider citing our aforementioned work.
 
-## Acknowledgement
-This work was supported by the Villum Investigator Grant “WATER” from the Villum Fonden, Denmark.
-
 ```bibtex
 @INPROCEEDINGS{9833984,
   author={Croisfelt, Victor and Saggese, Fabio and Leyva-Mayorga, Israel, and Kotaba, Radosław and Gradoni, Gabriele and Popovski, Petar},
@@ -41,5 +38,9 @@ This work was supported by the Villum Investigator Grant “WATER” from the Vi
   keywords={Training;Wireless communication;Access protocols;Reconfigurable intelligent surfaces;Signal processing;Throughput;Reflection;Reconfigurable intelligent surface (RIS);random access},
   doi={10.1109/SPAWC51304.2022.9833984}
 }
+```
+
+## Acknowledgement
+This work was supported by the Villum Investigator Grant “WATER” from the Villum Fonden, Denmark.
 
 
